@@ -1,0 +1,63 @@
+Category,Ref,Component,Description,Qty,Unit Cost (USD),Total (USD),Source,URL
+ELECTRONICS - MCU,,,,,,,,
+electrical,U3,ESP32-S3-DevKitC-1-N8R8,Main MCU with 8MB PSRAM for image processing,1,15.00,15.00,DigiKey,https://www.digikey.com/en/products/detail/espressif-systems/ESP32-S3-DEVKITC-1-N8R8/15970977
+ELECTRONICS - DISPLAY,,,,,,,,
+electrical,U10,ILI9341 2.4" TFT Display (320x240 SPI),Color TFT for results and UI (replaces SSD1306 OLED),1,12.00,12.00,Amazon,https://www.amazon.com/s?k=ILI9341+2.4+inch+TFT+SPI+display
+ELECTRONICS - POWER,,,,,,,,
+electrical,BT1,3.7V 1000mAh LiPo Battery,Rechargeable power source for portable operation,1,10.00,10.00,Amazon,https://www.amazon.com/s?k=3.7V+1000mAh+LiPo+battery
+electrical,U1,MCP73833 USB-C Charger Module,Lithium charger with USB-C input,1,12.50,12.50,Adafruit,https://www.adafruit.com/product/390
+electrical,U2,Pololu S13V25F9 (9V Regulator),Step-up/step-down regulator for heater/motor,1,12.00,12.00,Pololu,https://www.pololu.com/product/4041
+electrical,U4,Pololu S7V8F3 (3.3V Regulator),Efficient 3.3V regulator for MCU and sensors,1,6.00,6.00,Pololu,https://www.pololu.com/product/2122
+electrical,U12,MAX17048 LiPo Fuel Gauge,I2C battery state-of-charge monitor,1,5.50,5.50,DigiKey,https://www.digikey.com/en/products/filter/battery-management/battery-fuel-gauges/159?s=MAX17048
+electrical,PCB1,Custom Power Distribution PCB,Power hub with fuse and filtering,1,5.00,5.00,OSH Park,https://www.oshpark.com
+ELECTRONICS - SENSORS,,,,,,,,
+electrical,U5,SHT31-D Temperature & Humidity Sensor,High-accuracy ambient environment sensor (I2C),1,12.00,12.00,Adafruit,https://www.adafruit.com/product/2857
+electrical,U6,BH1750 Ambient Light Sensor,Light level monitoring for ambient rejection (I2C),1,4.50,4.50,Amazon,https://www.amazon.com/s?k=BH1750+light+sensor
+electrical,U11,DS3231 RTC Module,Real-time clock with battery backup for timestamps,1,6.00,6.00,Amazon,https://www.amazon.com/s?k=DS3231+RTC+module
+electrical,R_NTC,10k NTC Thermistor (B3950),Tray temperature sensor for PID heater control,1,0.50,0.50,Amazon,https://www.amazon.com/s?k=10k+ntc+thermistor
+electrical,SW3,MC-38 Magnetic Reed Switch,Safety interlock for UV tray detection,1,4.00,4.00,Amazon,https://www.amazon.com/s?k=MC-38+reed+switch
+electrical,SW2,Micro Limit Switch (KVW-5),Tray home position reference,1,2.00,2.00,Amazon,https://www.amazon.com/s?k=micro+limit+switch
+ELECTRONICS - CAMERA & OPTICS,,,,,,,,
+electrical,CAM1,OV2640 Camera with CPL Filter,Camera module with circular polarizer for wet-pad imaging,1,22.00,22.00,Amazon,https://www.amazon.com/s?k=OV2640+camera+CPL+filter
+electrical,U9,GM65 Barcode Scanner Module,UART barcode/QR reader for patient ID scanning,1,28.00,28.00,Amazon,https://www.amazon.com/s?k=GM65+barcode+scanner+module
+ELECTRONICS - ACTUATORS,,,,,,,,
+electrical,D1,5V White LED Array Module,Uniform illumination for strip imaging,1,3.00,3.00,Amazon,https://www.amazon.com/s?k=5V+white+LED+array+module
+electrical,D2,Common Anode RGB LED,System status indicator (7 colors),1,0.50,0.50,Amazon,https://www.amazon.com/s?k=rgb+led+common+anode
+electrical,D3,275nm UV-C LED Module,Tray sterilization after each test cycle,1,15.00,15.00,DigiKey,https://www.digikey.com/en/products/filter/led-emitters-uv-ir-visible/94
+electrical,M1,NEMA 17 Stepper Motor (20mm body),Drives dipstick tray to precise focal positions,1,12.00,12.00,Amazon,https://www.amazon.com/s?k=nema+17+stepper+motor+small
+electrical,U7,A4988 Stepper Motor Driver,Step/direction motor controller with microstepping,1,5.00,5.00,Amazon,https://www.amazon.com/s?k=A4988+stepper+driver
+electrical,HTR1,Polyimide Heating Film (25x50mm),Flexible heater for 37°C enzyme incubation,1,8.00,8.00,Amazon,https://www.amazon.com/s?k=polyimide+heating+film+5v
+electrical,FAN1,30mm 5V Brushless DC Fan,Post-measurement venting and dehumidification,1,5.00,5.00,Amazon,https://www.amazon.com/s?k=30mm+5v+fan+brushless
+electrical,BZ1,5V Active Piezo Buzzer,Audible alerts for results and errors,1,1.50,1.50,Amazon,https://www.amazon.com/s?k=5v+active+piezo+buzzer
+ELECTRONICS - SWITCHING,,,,,,,,
+electrical,Q1,2N7000 N-Channel MOSFET,Fan switching (low-side),1,0.50,0.50,Amazon,https://www.amazon.com/s?k=2N7000+mosfet
+electrical,Q2,IRLZ44N Logic Level MOSFET,UV-C LED driver (high current),1,1.00,1.00,Amazon,https://www.amazon.com/s?k=IRLZ44N+mosfet
+electrical,Q3,IRLZ44N Logic Level MOSFET,Heater control (high current PWM),1,1.00,1.00,Amazon,https://www.amazon.com/s?k=IRLZ44N+mosfet
+ELECTRONICS - PASSIVE & MISC,,,,,,,,
+electrical,SW1,Tactile Push Button 6x6mm,Measure/navigate button,1,0.50,0.50,Amazon,https://www.amazon.com/s?k=tactile+push+button+6x6mm
+electrical,SD1,Micro SD Card Module (SPI),Data logging and raw image storage,1,4.00,4.00,Amazon,https://www.amazon.com/s?k=micro+sd+card+module+spi
+MECHANICAL - ENCLOSURE,,,,,,,,
+mechanical,ENC1,Injection-Molded Enclosure Base,180x120x40mm base with mounting bosses and guide rails,1,25.00,25.00,Custom Mold,N/A
+mechanical,ENC2,Injection-Molded Enclosure Cover,Matching cover with display window and snap-fits,1,7.00,7.00,Custom Mold / 3D Print,N/A
+mechanical,TRAY1,Injection-Molded Dipstick Tray,120x25x8mm tray with strip channel and T8 nut mount,1,10.00,10.00,Custom Mold / 3D Print,N/A
+MECHANICAL - MOUNTS & BRACKETS,,,,,,,,
+mechanical,MNT1,Camera & LED Mount Bracket,3D-printed bracket for camera and LED at optimal angle,1,4.00,4.00,3D Print,https://www.prusaprinters.org/prints/custom-camera-led-mount
+mechanical,MNT2,Barcode Scanner Mount,3D-printed bracket for GM65 alignment,1,3.00,3.00,3D Print,https://www.prusaprinters.org/prints/custom-scanner-mount
+mechanical,MNT3,Exhaust Vent Grill,3D-printed slotted grill for fan port,1,2.00,2.00,3D Print,N/A
+mechanical,MNT4,Internal Cable Management Frame,Wire routing skeleton to keep optics clear,1,2.00,2.00,3D Print,N/A
+MECHANICAL - MOTION,,,,,,,,
+mechanical,LS1,T8 Lead Screw 100mm + Copper Nut,Linear motion conversion for tray positioning,1,8.00,8.00,Amazon,https://www.amazon.com/s?k=T8+lead+screw+100mm
+MECHANICAL - FASTENERS & SEALS,,,,,,,,
+mechanical,HW1,M2x6mm Pan Head Screws,PCB and module mounting,12,0.05,0.60,Amazon,https://www.amazon.com/s?k=m2x6mm+pan+head+screws
+mechanical,HW2,M3x8mm Pan Head Screws,Cover attachment,4,0.10,0.40,Amazon,https://www.amazon.com/s?k=m3x8mm+pan+head+screws
+mechanical,HW3,M3 Brass Heat-Set Inserts,Reusable threads in 3D-printed/molded parts,4,0.20,0.80,Amazon,https://www.amazon.com/s?k=m3+brass+heat+set+inserts
+mechanical,HW4,M2.5 Brass Hex Standoffs,Electronics mounting,8,0.50,4.00,Amazon,https://www.amazon.com/s?k=M2.5+brass+standoff+kit
+mechanical,GSK1,Silicone Gasket Seal,Watertight seal between base and cover,1,3.00,3.00,Amazon,https://www.amazon.com/s?k=thin+silicone+rubber+sheet
+mechanical,GSK2,EPDM Foam Strips,UV-light-tight gasket for enclosure seams,1,5.00,5.00,Amazon,https://www.amazon.com/s?k=EPDM+foam+weather+stripping+small
+MECHANICAL - OPTICAL,,,,,,,,
+mechanical,OPT1,Frosted Acrylic Diffuser (30x20mm),LED light diffusion panel,1,2.00,2.00,Amazon,https://www.amazon.com/s?k=frosted+acrylic+sheet+small
+mechanical,OPT2,Fused Quartz Window (20x20mm),UV-transparent shield over camera,1,8.00,8.00,Amazon,https://www.amazon.com/s?k=fused+quartz+plate
+mechanical,OPT3,Telescope Flocking Paper,Anti-reflection coating for tray interior,1,10.00,10.00,Amazon,https://www.amazon.com/s?k=telescope+flocking+paper
+MECHANICAL - CALIBRATION,,,,,,,,
+mechanical,CAL1,Mini Color Calibration Card,Fixed reference for firmware color calibration,1,1.00,1.00,Amazon,https://www.amazon.com/s?k=miniature+color+calibration+card
+mechanical,CAL2,18% Gray / White Balance Card,White balance and exposure reference target,1,5.00,5.00,Amazon,https://www.amazon.com/s?k=mini+white+balance+card
