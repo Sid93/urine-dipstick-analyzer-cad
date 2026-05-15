@@ -410,6 +410,29 @@ def switch_pin2(x, y, angle=0):
 
 
 # ============================================================
+# Section boundary box (dashed rectangle with title)
+# ============================================================
+
+def kicad_section_box(title, x1, y1, x2, y2):
+    """Draw a dashed boundary rectangle with a title, like the reference schematic."""
+    x1, y1, x2, y2 = snap(x1), snap(y1), snap(x2), snap(y2)
+    elems = []
+    elems.append(f'''  (polyline
+    (pts
+      (xy {x1:.2f} {y1:.2f}) (xy {x2:.2f} {y1:.2f}) (xy {x2:.2f} {y2:.2f})
+      (xy {x1:.2f} {y2:.2f}) (xy {x1:.2f} {y1:.2f})
+    )
+    (stroke
+      (width 0.254)
+      (type dash)
+    )
+    (uuid "{uid()}")
+  )''')
+    elems.append(kicad_text(title, (x1 + x2) / 2, y1 + 5.08, 3.0))
+    return elems
+
+
+# ============================================================
 # Module block builder -- draws a wire rectangle with title
 # and places net labels at pin positions along the edges.
 # ============================================================
@@ -567,11 +590,39 @@ def generate_schematic():
     elements = []
 
     # =========================================================
+    # SECTION BOUNDARY BOXES (dashed rectangles like reference)
+    # =========================================================
+    elements.extend(kicad_section_box("Power Supply Section",
+                                      10.16, 7.62, 165.10, 114.30))
+    elements.extend(kicad_section_box("MCU & GPIO Section",
+                                      172.72, 7.62, 302.26, 198.12))
+    elements.extend(kicad_section_box("Sensors & I2C Section",
+                                      309.88, 7.62, 444.50, 160.02))
+    elements.extend(kicad_section_box("Camera & Optics Section",
+                                      309.88, 165.10, 444.50, 297.18))
+    elements.extend(kicad_section_box("Display & Storage Section",
+                                      172.72, 200.66, 302.26, 299.72))
+    elements.extend(kicad_section_box("Motor & Actuator Section",
+                                      10.16, 116.84, 165.10, 248.92))
+    elements.extend(kicad_section_box("UI: Button / LED / Buzzer Section",
+                                      10.16, 251.46, 165.10, 353.06))
+    elements.extend(kicad_section_box("Safety Section",
+                                      172.72, 302.26, 302.26, 355.60))
+
+    # Layout Instructions (like reference schematic)
+    elements.append(kicad_text("Layout Instructions:", 10.16, 363.22, 2.5))
+    elements.append(kicad_text("1. All decoupling caps should be placed as close to IC VCC pins as possible.", 10.16, 370.84, 1.5))
+    elements.append(kicad_text("2. I2C bus pull-ups: single pair of 4.7k at MCU end.", 10.16, 376.0, 1.5))
+    elements.append(kicad_text("3. SPI bus shared between TFT display and SD card (active-low CS per device).", 10.16, 381.0, 1.5))
+    elements.append(kicad_text("4. All MOSFETs are low-side switches with 10k gate pull-downs.", 10.16, 386.0, 1.5))
+    elements.append(kicad_text("5. UV-C LED requires series current-limiting resistor (47R @ 9V).", 10.16, 391.0, 1.5))
+
+    # =========================================================
     # SECTION 1: POWER SUPPLY  (x=20, y=20)
     # =========================================================
     px, py = 20.32, 20.32
 
-    elements.append(kicad_text("POWER SUPPLY", px + 30.48, py - 7.62, 4.0))
+    elements.append(kicad_text("", px + 30.48, py - 7.62, 4.0))  # title in section box now
 
     # --- LiPo Battery ---
     elements.append(kicad_text("BT1: LiPo 3.7V 2000mAh", px, py, 1.5))
@@ -1042,7 +1093,7 @@ def generate_schematic():
     # =========================================================
     # SECTION 7: UI (Button/LED/Buzzer)  (x=20, y=280)
     # =========================================================
-    ux, uy = 20.32, 281.94
+    ux, uy = 20.32, 259.08
 
     elements.append(kicad_text("UI: BUTTON / LED / BUZZER", ux + 20.32, uy - 7.62, 4.0))
 
@@ -1123,7 +1174,7 @@ def generate_schematic():
     # =========================================================
     # SECTION 8: SAFETY  (x=180, y=310)
     # =========================================================
-    safex, safey = 180.34, 312.42
+    safex, safey = 180.34, 309.88
 
     elements.append(kicad_text("SAFETY", safex + 10.16, safey - 7.62, 4.0))
 
