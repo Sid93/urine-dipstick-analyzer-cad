@@ -35,8 +35,8 @@ def main():
         headers = next(reader)
         rows = list(reader)
 
-    col_widths = [55, 14, 52, 72, 8, 16, 16, 20, 24]
-    col_names = ["Category", "Ref", "Component", "Description", "Qty", "Unit $", "Total $", "Source", ""]
+    col_widths = [12, 38, 38, 52, 8, 14, 14, 18, 18, 65]
+    col_names = ["Ref", "Component", "MPN", "Description", "Qty", "Unit $", "Total $", "Source", "", ""]
 
     pdf.set_font("Helvetica", "B", 7)
     pdf.set_fill_color(41, 65, 122)
@@ -53,10 +53,10 @@ def main():
     mechanical_cost = 0.0
 
     for row in rows:
-        if len(row) < 9:
+        if len(row) < 10:
             continue
 
-        cat, ref, comp, desc, qty_s, unit_s, total_s, source, url = row
+        cat, ref, comp, mpn, desc, qty_s, unit_s, total_s, source, url = row
 
         if cat.startswith("ELECTRONICS") or cat.startswith("MECHANICAL"):
             if cat != current_section:
@@ -81,10 +81,12 @@ def main():
         else:
             mechanical_cost += line_total
 
-        if desc and len(desc) > 45:
-            desc = desc[:43] + ".."
-        if comp and len(comp) > 32:
-            comp = comp[:30] + ".."
+        if desc and len(desc) > 38:
+            desc = desc[:36] + ".."
+        if comp and len(comp) > 26:
+            comp = comp[:24] + ".."
+        if mpn and len(mpn) > 26:
+            mpn = mpn[:24] + ".."
 
         alt_row = (total_parts % 2 == 0)
         if alt_row:
@@ -92,19 +94,20 @@ def main():
         else:
             pdf.set_fill_color(255, 255, 255)
 
-        pdf.cell(col_widths[0], 5, "", border=1, fill=alt_row)
-        pdf.cell(col_widths[1], 5, ref, border=1, fill=alt_row)
-        pdf.cell(col_widths[2], 5, comp, border=1, fill=alt_row)
+        pdf.cell(col_widths[0], 5, ref, border=1, fill=alt_row)
+        pdf.cell(col_widths[1], 5, comp, border=1, fill=alt_row)
+        pdf.cell(col_widths[2], 5, mpn, border=1, fill=alt_row)
         pdf.cell(col_widths[3], 5, desc, border=1, fill=alt_row)
         pdf.cell(col_widths[4], 5, str(qty), border=1, fill=alt_row, align="C")
         pdf.cell(col_widths[5], 5, f"${unit_cost:.2f}", border=1, fill=alt_row, align="R")
         pdf.cell(col_widths[6], 5, f"${line_total:.2f}", border=1, fill=alt_row, align="R")
         pdf.cell(col_widths[7], 5, source, border=1, fill=alt_row)
-        pdf.cell(col_widths[8], 5, "Link" if url and url != "N/A" else "", border=1, fill=alt_row, align="C")
+        link_w = col_widths[8] + col_widths[9]
+        pdf.cell(link_w, 5, "Link" if url and url != "N/A" else "", border=1, fill=alt_row, align="C")
         if url and url != "N/A":
-            x = pdf.get_x() - col_widths[8]
+            x = pdf.get_x() - link_w
             y = pdf.get_y()
-            pdf.link(x, y, col_widths[8], 5, url)
+            pdf.link(x, y, link_w, 5, url)
         pdf.ln()
 
     # Totals
@@ -116,7 +119,7 @@ def main():
     sum_w = sum(col_widths[:6])
     pdf.cell(sum_w, 7, f"TOTAL ({total_parts} parts)", border=1, fill=True)
     pdf.cell(col_widths[6], 7, f"${total_cost:.2f}", border=1, fill=True, align="R")
-    pdf.cell(sum(col_widths[7:]), 7, "", border=1, fill=True)
+    pdf.cell(sum(col_widths[7:10]), 7, "", border=1, fill=True)
     pdf.ln()
 
     pdf.set_text_color(0, 0, 0)
