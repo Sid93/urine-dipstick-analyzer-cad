@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  body { font-family: -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 11pt; line-height: 1.6; color: #222; max-width: 900px; margin: 40px auto; padding: 0 20px; }
+  h1 { font-size: 22pt; border-bottom: 2px solid #333; padding-bottom: 6px; margin-top: 36px; }
+  h2 { font-size: 16pt; border-bottom: 1px solid #bbb; padding-bottom: 4px; margin-top: 28px; color: #1a1a1a; }
+  h3 { font-size: 13pt; margin-top: 20px; color: #333; }
+  h4 { font-size: 11pt; margin-top: 16px; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 9.5pt; }
+  th, td { border: 1px solid #bbb; padding: 6px 10px; text-align: left; }
+  th { background-color: #f0f0f0; font-weight: 600; }
+  tr:nth-child(even) { background-color: #f9f9f9; }
+  code { background: #f4f4f4; padding: 2px 5px; border-radius: 3px; font-size: 10pt; font-family: 'SF Mono', Menlo, monospace; }
+  pre { background: #f4f4f4; padding: 14px; border-radius: 5px; overflow-x: auto; font-size: 9.5pt; }
+  pre code { background: none; padding: 0; }
+  hr { border: none; border-top: 1px solid #ddd; margin: 24px 0; }
+  ol, ul { padding-left: 24px; }
+  li { margin-bottom: 4px; }
+  strong { color: #111; }
+</style></head><body><h1 id="urine-dipstick-analyzer-comprehensive-build-report">Urine Dipstick Analyzer -- Comprehensive Build Report</h1>
+<p><strong>Document Version:</strong> 1.0<br />
+<strong>Date:</strong> 2026-05-15<br />
+<strong>Target Market:</strong> India (CDSCO-regulated)<br />
+<strong>Platform:</strong> ESP32-S3 MCU with OV2640 Camera  </p>
+<hr />
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol>
+<li><a href="#1-scientific-principle-and-method">Scientific Principle and Method</a></li>
+<li><a href="#2-optical-design">Optical Design</a></li>
+<li><a href="#3-full-bill-of-materials-with-costs">Full Bill of Materials with Costs</a></li>
+<li><a href="#4-pcb-design-notes">PCB Design Notes</a></li>
+<li><a href="#5-mechanical-assembly-instructions">Mechanical Assembly Instructions</a></li>
+<li><a href="#6-firmware-overview">Firmware Overview</a></li>
+<li><a href="#7-calibration-procedure">Calibration Procedure</a></li>
+<li><a href="#8-regulatory-considerations-for-india-cdsco--mdr-2017">Regulatory Considerations for India</a></li>
+</ol>
+<hr />
+<h2 id="1-scientific-principle-and-method">1. Scientific Principle and Method</h2>
+<h3 id="11-reflectance-photometry-overview">1.1 Reflectance Photometry Overview</h3>
+<p>The Urine Dipstick Analyzer operates on the principle of <strong>reflectance photometry</strong> (also called colorimetric analysis). A urine dipstick is a narrow plastic strip with 10 discrete reagent pads bonded along its length. Each pad contains dried chemical reagents specific to a single analyte. When the strip is dipped in a urine sample, the reagent pads absorb the specimen and undergo chemical reactions that produce a visible color change. The intensity and hue of that color change are proportional to the concentration of the target analyte in the sample.</p>
+<p>In traditional manual reading, a trained technician visually compares each pad against a printed color chart supplied by the strip manufacturer. This method is inherently subjective, operator-dependent, and prone to timing errors. Automated reflectance photometry eliminates these variables by using a controlled light source, a calibrated image sensor, and algorithmic color quantification to produce consistent, reproducible results.</p>
+<h3 id="12-parameters-measured">1.2 Parameters Measured</h3>
+<p>The device measures 10 standard urinalysis parameters. Each parameter, its underlying chemical reaction, and clinical significance are summarized below.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Reagent Chemistry</th>
+<th>Clinical Range</th>
+<th>Clinical Significance</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Glucose</td>
+<td>Glucose oxidase / peroxidase</td>
+<td>Negative to 2000 mg/dL</td>
+<td>Diabetes screening, glycosuria</td>
+</tr>
+<tr>
+<td>Protein (Albumin)</td>
+<td>Tetrabromophenol blue (protein error of indicators)</td>
+<td>Negative to 2000 mg/dL</td>
+<td>Kidney disease, proteinuria</td>
+</tr>
+<tr>
+<td>pH</td>
+<td>Methyl red + bromothymol blue</td>
+<td>5.0 -- 9.0</td>
+<td>Acid-base status, UTI, renal tubular acidosis</td>
+</tr>
+<tr>
+<td>Specific Gravity</td>
+<td>Polyionic electrolyte complex</td>
+<td>1.000 -- 1.030</td>
+<td>Hydration status, concentrating ability</td>
+</tr>
+<tr>
+<td>Ketones</td>
+<td>Sodium nitroprusside (Legal test)</td>
+<td>Negative to 160 mg/dL</td>
+<td>Diabetic ketoacidosis, starvation</td>
+</tr>
+<tr>
+<td>Bilirubin</td>
+<td>Diazotized dichloroaniline</td>
+<td>Negative to 6 mg/dL</td>
+<td>Liver disease, biliary obstruction</td>
+</tr>
+<tr>
+<td>Urobilinogen</td>
+<td>Modified Ehrlich reagent</td>
+<td>0.2 -- 8.0 mg/dL</td>
+<td>Hemolysis, liver function</td>
+</tr>
+<tr>
+<td>Blood / Hemoglobin</td>
+<td>Pseudoperoxidase activity of hemoglobin</td>
+<td>Negative to 250 RBC/uL</td>
+<td>Hematuria, kidney stones, infection</td>
+</tr>
+<tr>
+<td>Nitrite</td>
+<td>Griess reaction (aromatic amine + coupling agent)</td>
+<td>Negative / Positive</td>
+<td>Bacteriuria (gram-negative organisms)</td>
+</tr>
+<tr>
+<td>Leukocytes</td>
+<td>Esterase hydrolysis of indoxyl derivative</td>
+<td>Negative to 500 WBC/uL</td>
+<td>Urinary tract infection, inflammation</td>
+</tr>
+</tbody>
+</table>
+<h3 id="13-measurement-principle">1.3 Measurement Principle</h3>
+<p>The measurement workflow proceeds as follows:</p>
+<ol>
+<li>The urine-wetted dipstick is placed on the motorized tray.</li>
+<li>After a manufacturer-specified reaction time (typically 60--120 seconds), the tray advances the strip to the imaging position.</li>
+<li>A white LED array illuminates the strip under controlled, diffuse lighting conditions.</li>
+<li>The OV2640 camera captures a high-resolution image of the strip surface.</li>
+<li>Firmware extracts a Region of Interest (ROI) for each reagent pad.</li>
+<li>The RGB pixel values within each ROI are converted to HSV color space for analysis.</li>
+<li>The measured HSV triplet is compared against pre-stored calibration lookup tables (derived from known-concentration calibration strips).</li>
+<li>A polynomial fitting function maps the color values to analyte concentration.</li>
+<li>The concentration is classified into semiquantitative clinical categories: Negative, Trace, 1+, 2+, 3+, 4+ (or specific mg/dL ranges, depending on the analyte).</li>
+</ol>
+<h3 id="14-applicable-standards">1.4 Applicable Standards</h3>
+<ul>
+<li><strong>CLSI GP16-A3</strong> -- Urinalysis: Approved Guideline (specimen handling, strip reading timing, QC)</li>
+<li><strong>ISO 15197</strong> -- In vitro diagnostic test systems (performance requirements)</li>
+<li><strong>ISO 14971</strong> -- Application of risk management to medical devices</li>
+</ul>
+<hr />
+<h2 id="2-optical-design">2. Optical Design</h2>
+<h3 id="21-led-illumination-system">2.1 LED Illumination System</h3>
+<p>Uniform, repeatable illumination is critical for accurate colorimetric measurement. The illumination subsystem consists of:</p>
+<ul>
+<li><strong>Light Source:</strong> 5V white LED array module (color temperature ~5500K, daylight-equivalent). A single module provides sufficient flux for the small imaging area (~120 x 25 mm strip surface).</li>
+<li><strong>Diffuser:</strong> A frosted acrylic diffuser panel (30 x 20 x 1 mm) is placed between the LED array and the dipstick surface. This converts the point-source LED output into spatially uniform, diffuse illumination across the entire strip length.</li>
+<li><strong>Illumination Geometry:</strong> The LED/diffuser assembly is mounted at a <strong>45-degree angle</strong> relative to the strip surface. This angled illumination minimizes specular (mirror-like) reflections from the wet reagent pads, which would otherwise saturate the camera sensor and corrupt color readings.</li>
+<li><strong>Light Isolation:</strong> The interior of the measurement chamber is lined with <strong>self-adhesive flocking sheet</strong> (black, velvet-like material). This absorbs stray light and prevents internal reflections that could contaminate the measurement.</li>
+</ul>
+<h3 id="22-imaging-system">2.2 Imaging System</h3>
+<ul>
+<li><strong>Camera:</strong> OV2640 module, 2 megapixel (1600 x 1200 resolution), connected via DVP (Digital Video Port) interface to the ESP32-S3. The DVP interface provides faster frame transfer than SPI-based camera modules, which is important for the 8-bit RGB565 or JPEG capture modes used during analysis.</li>
+<li><strong>Polarizer:</strong> A <strong>circular polarizer (CPL) filter</strong> is attached to the camera lens. The CPL further rejects specular reflections from the wet, glossy surface of reagent pads. This is especially important for pads that remain visibly moist during reading.</li>
+<li><strong>Working Distance:</strong> The camera is fixed at approximately <strong>50 mm</strong> from the strip surface. At this distance, the camera field of view covers the full 10-pad strip length with sufficient pixel density for per-pad ROI extraction (~80-100 pixels per pad).</li>
+<li><strong>Focus:</strong> Fixed focus, preset at the dipstick plane during assembly. No autofocus mechanism is required because the strip-to-camera distance is mechanically constrained by the tray and mount geometry.</li>
+</ul>
+<h3 id="23-color-calibration-system">2.3 Color Calibration System</h3>
+<ul>
+<li><strong>Color Calibration Card:</strong> A printed reference card (20 x 10 mm) with known color patches is permanently mounted on the dipstick tray surface, adjacent to the strip position. Every captured image includes these reference patches, enabling firmware-based drift compensation.</li>
+<li><strong>White Balance Target Card:</strong> A separate mini gray/white card provides a known-reflectance surface for automatic white balance correction. This compensates for LED aging and temperature-dependent color shifts.</li>
+<li><strong>Ambient Light Sensor:</strong> A <strong>BH1750</strong> digital ambient light sensor (I2C interface) is mounted inside the measurement chamber. It detects any ambient light leakage through the tray aperture or enclosure seams. If ambient light exceeds a threshold (&gt;5 lux), the firmware delays measurement until conditions are stable, or alerts the operator to close the tray fully.</li>
+</ul>
+<h3 id="24-uv-c-sterilization-system">2.4 UV-C Sterilization System</h3>
+<p>Urine dipstick analysis involves biological specimens, and cross-contamination between successive tests is a concern. The device includes an integrated UV-C sterilization stage:</p>
+<ul>
+<li><strong>UV-C LED:</strong> A <strong>275 nm UV-C LED module</strong> is mounted above the tray in the retracted (home) position. After each measurement, the tray retracts to the UV-C exposure zone and the LED operates for 30 seconds, delivering germicidal irradiance to the tray surface.</li>
+<li><strong>UV Window:</strong> A <strong>quartz glass window</strong> (20 x 20 mm, UV-transparent) protects the camera lens from UV exposure while allowing transmission at 275 nm. Standard glass or acrylic would absorb UV-C radiation.</li>
+<li><strong>Safety Interlock:</strong> An <strong>MC-38 magnetic reed switch</strong> is mounted at the tray aperture. The switch detects whether the tray is retracted and the chamber is sealed before allowing UV-C activation. If the tray is extended or the chamber is open, UV-C emission is hardware-blocked via MOSFET gate control.</li>
+<li><strong>UV Shielding:</strong> <strong>EPDM foam gaskets</strong> are installed at all seams and joints in the UV-C zone to prevent UV light leakage to the exterior. EPDM rubber is highly resistant to UV degradation.</li>
+</ul>
+<hr />
+<h2 id="3-full-bill-of-materials-with-costs">3. Full Bill of Materials with Costs</h2>
+<h3 id="31-electrical-components">3.1 Electrical Components</h3>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Description</th>
+<th>Qty</th>
+<th>Unit Cost (USD)</th>
+<th>Total (USD)</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ESP32-S3-DevKitC-1-N8R8</td>
+<td>Main MCU, 8MB PSRAM for image processing</td>
+<td>1</td>
+<td>15.00</td>
+<td>15.00</td>
+<td>DigiKey</td>
+</tr>
+<tr>
+<td>OV2640 Camera + CPL</td>
+<td>Camera module with circular polarizer filter</td>
+<td>1</td>
+<td>22.00</td>
+<td>22.00</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>SSD1306 OLED Display</td>
+<td>0.96" I2C monochrome display, 128x64 px</td>
+<td>1</td>
+<td>5.00</td>
+<td>5.00</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>White LED Array</td>
+<td>5V LED module, ~5500K color temp</td>
+<td>1</td>
+<td>3.00</td>
+<td>3.00</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>3.7V 1000mAh LiPo</td>
+<td>Rechargeable lithium polymer battery</td>
+<td>1</td>
+<td>10.00</td>
+<td>10.00</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>MCP73833 USB-C Charger</td>
+<td>LiPo charge management IC breakout</td>
+<td>1</td>
+<td>12.50</td>
+<td>12.50</td>
+<td>Adafruit</td>
+</tr>
+<tr>
+<td>Pololu S13V25F9</td>
+<td>9V/5V buck-boost voltage regulator</td>
+<td>1</td>
+<td>12.00</td>
+<td>12.00</td>
+<td>Pololu</td>
+</tr>
+<tr>
+<td>Pololu S7V8F3</td>
+<td>3.3V buck-boost voltage regulator</td>
+<td>1</td>
+<td>6.00</td>
+<td>6.00</td>
+<td>Pololu</td>
+</tr>
+<tr>
+<td>Power Distribution PCB</td>
+<td>Custom 2-layer power management hub</td>
+<td>1</td>
+<td>5.00</td>
+<td>5.00</td>
+<td>OSHPark</td>
+</tr>
+<tr>
+<td>A4988 Stepper Driver</td>
+<td>Bipolar stepper motor driver, adjustable current</td>
+<td>1</td>
+<td>5.00</td>
+<td>5.00</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>NEMA 17 Stepper Motor</td>
+<td>20mm body length, 200 steps/rev, 12V rated</td>
+<td>1</td>
+<td>12.00</td>
+<td>12.00</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>SHT31-D</td>
+<td>Digital temperature and humidity sensor (I2C)</td>
+<td>1</td>
+<td>12.00</td>
+<td>12.00</td>
+<td>Adafruit</td>
+</tr>
+<tr>
+<td>BH1750</td>
+<td>Digital ambient light sensor module (I2C)</td>
+<td>1</td>
+<td>4.50</td>
+<td>4.50</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>10K NTC Thermistor</td>
+<td>Tray surface temperature sensing</td>
+<td>1</td>
+<td>0.50</td>
+<td>0.50</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>GM65 Barcode Scanner</td>
+<td>QR/barcode reader module (UART interface)</td>
+<td>1</td>
+<td>28.00</td>
+<td>28.00</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>Micro SD Card Module</td>
+<td>SPI interface, data logging</td>
+<td>1</td>
+<td>4.00</td>
+<td>4.00</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>275nm UV-C LED</td>
+<td>Germicidal sterilization LED</td>
+<td>1</td>
+<td>15.00</td>
+<td>15.00</td>
+<td>DigiKey</td>
+</tr>
+<tr>
+<td>Polyimide Heater Film</td>
+<td>25x50mm, 5V, ~2W</td>
+<td>1</td>
+<td>8.00</td>
+<td>8.00</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>30mm 5V DC Fan</td>
+<td>Chamber ventilation and cooling</td>
+<td>1</td>
+<td>5.00</td>
+<td>5.00</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>5V Active Piezo Buzzer</td>
+<td>Audible alerts and notifications</td>
+<td>1</td>
+<td>1.50</td>
+<td>1.50</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>RGB LED (Common Anode)</td>
+<td>Status indicator (R/G/B channels)</td>
+<td>1</td>
+<td>0.50</td>
+<td>0.50</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>Tactile Push Button 6x6mm</td>
+<td>Measure trigger, menu navigation</td>
+<td>1</td>
+<td>0.50</td>
+<td>0.50</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>MC-38 Reed Switch</td>
+<td>Magnetic safety interlock sensor</td>
+<td>1</td>
+<td>4.00</td>
+<td>4.00</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>Micro Limit Switch</td>
+<td>Tray home position detection</td>
+<td>1</td>
+<td>2.00</td>
+<td>2.00</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>2N7000 MOSFET (N-ch)</td>
+<td>Fan control switching</td>
+<td>1</td>
+<td>0.50</td>
+<td>0.50</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>IRLZ44N MOSFET (N-ch)</td>
+<td>UV LED driver (logic-level gate)</td>
+<td>1</td>
+<td>1.00</td>
+<td>1.00</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>IRLZ44N MOSFET (N-ch)</td>
+<td>Heater control switching</td>
+<td>1</td>
+<td>1.00</td>
+<td>1.00</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>Resistors (assorted)</td>
+<td>Pull-ups, current limiters, voltage dividers</td>
+<td>~20</td>
+<td>0.05</td>
+<td>1.00</td>
+<td>Local</td>
+</tr>
+<tr>
+<td>Capacitors (assorted)</td>
+<td>100nF ceramic decoupling, 10uF bulk</td>
+<td>~15</td>
+<td>0.05</td>
+<td>0.75</td>
+<td>Local</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Electrical Subtotal: $197.25</strong></p>
+<h3 id="32-mechanical-components">3.2 Mechanical Components</h3>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Description</th>
+<th>Qty</th>
+<th>Unit Cost (USD)</th>
+<th>Total (USD)</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Molded Enclosure Base</td>
+<td>180x120x40mm ABS/PETG, main housing</td>
+<td>1</td>
+<td>25.00</td>
+<td>25.00</td>
+<td>3D print / mold</td>
+</tr>
+<tr>
+<td>Enclosure Top Cover</td>
+<td>180x120x5mm PETG, snap-fit or screw mount</td>
+<td>1</td>
+<td>7.00</td>
+<td>7.00</td>
+<td>3D print</td>
+</tr>
+<tr>
+<td>Molded Dipstick Tray</td>
+<td>120x25x8mm, strip channel with calibration card recess</td>
+<td>1</td>
+<td>10.00</td>
+<td>10.00</td>
+<td>3D print / mold</td>
+</tr>
+<tr>
+<td>Camera and LED Mount</td>
+<td>40x30x25mm PETG bracket, 45-degree LED angle</td>
+<td>1</td>
+<td>4.00</td>
+<td>4.00</td>
+<td>3D print</td>
+</tr>
+<tr>
+<td>Scanner Mount</td>
+<td>35x25x15mm bracket for GM65 barcode module</td>
+<td>1</td>
+<td>3.00</td>
+<td>3.00</td>
+<td>3D print</td>
+</tr>
+<tr>
+<td>Vent Grill</td>
+<td>35x35mm slotted panel for fan exhaust</td>
+<td>1</td>
+<td>2.00</td>
+<td>2.00</td>
+<td>3D print</td>
+</tr>
+<tr>
+<td>Cable Management Frame</td>
+<td>160x100x10mm internal skeleton for routing wires</td>
+<td>1</td>
+<td>2.00</td>
+<td>2.00</td>
+<td>3D print</td>
+</tr>
+<tr>
+<td>T8 Lead Screw + Nut</td>
+<td>100mm linear actuator, 2mm pitch</td>
+<td>1</td>
+<td>8.00</td>
+<td>8.00</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>M2x6mm Screws</td>
+<td>PCB and module mounting</td>
+<td>12</td>
+<td>0.05</td>
+<td>0.60</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>M3x8mm Screws</td>
+<td>Enclosure cover attachment</td>
+<td>4</td>
+<td>0.10</td>
+<td>0.40</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>M3 Heat-Set Inserts</td>
+<td>Brass threaded inserts for PETG</td>
+<td>4</td>
+<td>0.20</td>
+<td>0.80</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>M2.5 Standoffs (kit)</td>
+<td>PCB mounting standoff set (M/F, various lengths)</td>
+<td>1</td>
+<td>4.00</td>
+<td>4.00</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>Silicone Gasket</td>
+<td>98x68x1mm chamber seal</td>
+<td>1</td>
+<td>3.00</td>
+<td>3.00</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>Frosted Acrylic Diffuser</td>
+<td>30x20x1mm, light diffusion panel</td>
+<td>1</td>
+<td>2.00</td>
+<td>2.00</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>Color Calibration Card</td>
+<td>20x10mm printed color reference patches</td>
+<td>1</td>
+<td>1.00</td>
+<td>1.00</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>White Balance Card</td>
+<td>Mini gray/white reference card</td>
+<td>1</td>
+<td>5.00</td>
+<td>5.00</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>Quartz Glass Window</td>
+<td>20x20mm UV-transparent window</td>
+<td>1</td>
+<td>8.00</td>
+<td>8.00</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>Flocking Sheet</td>
+<td>Self-adhesive black light absorber, A4 sheet</td>
+<td>1</td>
+<td>10.00</td>
+<td>10.00</td>
+<td>Amazon</td>
+</tr>
+<tr>
+<td>EPDM Foam Gasket</td>
+<td>UV shielding strips, adhesive-backed</td>
+<td>1</td>
+<td>5.00</td>
+<td>5.00</td>
+<td>Amazon</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Mechanical Subtotal: $100.80</strong></p>
+<h3 id="33-cost-summary">3.3 Cost Summary</h3>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Cost (USD)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Electrical Components</td>
+<td>$197.25</td>
+</tr>
+<tr>
+<td>Mechanical Components</td>
+<td>$100.80</td>
+</tr>
+<tr>
+<td><strong>Prototype Total</strong></td>
+<td><strong>~$298</strong></td>
+</tr>
+<tr>
+<td><strong>Estimated Volume Cost (100+ units)</strong></td>
+<td><strong>$180 -- $220</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Volume cost reductions come from: bulk component pricing (30--40% savings on passives and modules), injection-molded enclosure parts replacing 3D prints, and consolidated PCB assembly replacing hand-wired breakout boards.</p>
+<hr />
+<h2 id="4-pcb-design-notes">4. PCB Design Notes</h2>
+<h3 id="41-architecture">4.1 Architecture</h3>
+<p>The prototype uses the <strong>ESP32-S3-DevKitC-1</strong> development board as the main controller, paired with a custom <strong>Power Distribution PCB</strong> that centralizes voltage regulation, decoupling, and ground management.</p>
+<p>For production, these should be consolidated into a single application-specific PCB carrying the ESP32-S3 module (ESP32-S3-WROOM-1) directly, along with all power management, sensor interfaces, and driver circuits.</p>
+<h3 id="42-power-distribution-pcb">4.2 Power Distribution PCB</h3>
+<ul>
+<li><strong>Layer Count:</strong> 2-layer FR-4, 1.6mm thickness, 1oz copper</li>
+<li><strong>Dimensions:</strong> Approximately 50 x 40 mm</li>
+<li><strong>Function:</strong> Accepts 3.3V and 5V from the buck-boost regulators and distributes to all subsystems with per-rail decoupling and protection</li>
+</ul>
+<h3 id="43-grounding-strategy">4.3 Grounding Strategy</h3>
+<ul>
+<li><strong>Star grounding topology:</strong> Separate analog and digital ground planes converge at a single star point near the power entry. This prevents digital switching noise (stepper driver, ESP32 clock) from coupling into the analog sensor readings (thermistor ADC, camera DVP bus).</li>
+<li>The camera DVP data bus and the I2C sensor bus should be routed on opposite sides of the PCB with a ground pour separating them.</li>
+</ul>
+<h3 id="44-decoupling">4.4 Decoupling</h3>
+<ul>
+<li><strong>100nF ceramic capacitor</strong> placed within 5mm of every IC power pin (ESP32-S3, SHT31, BH1750, OLED driver, A4988)</li>
+<li><strong>10uF electrolytic or tantalum</strong> bulk capacitor on each power rail at the point of entry to the PCB</li>
+<li><strong>100uF electrolytic</strong> on the stepper driver VMOT pin (required by A4988 datasheet to absorb back-EMF spikes)</li>
+</ul>
+<h3 id="45-interface-bus-layout">4.5 Interface Bus Layout</h3>
+<table>
+<thead>
+<tr>
+<th>Bus</th>
+<th>Signals</th>
+<th>GPIO Assignments</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>I2C</td>
+<td>SCL, SDA</td>
+<td>GPIO18 (SCL), GPIO19 (SDA)</td>
+<td>4.7K ohm pull-ups to 3.3V; max 3 devices</td>
+</tr>
+<tr>
+<td>SPI (SD Card)</td>
+<td>MOSI, MISO, SCK, CS</td>
+<td>GPIO38, GPIO39, GPIO40, GPIO41</td>
+<td>Dedicated bus, no shared devices</td>
+</tr>
+<tr>
+<td>DVP (Camera)</td>
+<td>D0-D7, PCLK, VSYNC, HREF, XCLK</td>
+<td>Per ESP32-S3 DVP pin map</td>
+<td>Short traces, matched length preferred</td>
+</tr>
+<tr>
+<td>UART (Scanner)</td>
+<td>TX, RX</td>
+<td>GPIO43 (TX), GPIO44 (RX)</td>
+<td>9600 baud default for GM65</td>
+</tr>
+<tr>
+<td>Stepper</td>
+<td>STEP, DIR</td>
+<td>GPIO4 (STEP), GPIO16 (DIR)</td>
+<td>100 ohm series resistors recommended</td>
+</tr>
+</tbody>
+</table>
+<h3 id="46-mosfet-driver-circuits">4.6 MOSFET Driver Circuits</h3>
+<p>All three MOSFET-switched loads (fan, UV LED, heater) use identical driver topology:</p>
+<ul>
+<li><strong>Gate:</strong> Connected to ESP32 GPIO via 100 ohm series resistor (limits inrush current to gate capacitance)</li>
+<li><strong>Gate Pull-Down:</strong> 10K ohm resistor from gate to ground (ensures load is OFF during ESP32 boot/reset when GPIOs are floating)</li>
+<li><strong>Drain:</strong> Connected to load negative terminal</li>
+<li><strong>Source:</strong> Connected to ground</li>
+<li><strong>Flyback Diode:</strong> 1N4007 across the fan motor terminals (suppresses inductive kick)</li>
+</ul>
+<h3 id="47-production-recommendations">4.7 Production Recommendations</h3>
+<ul>
+<li>Move to a <strong>4-layer stackup</strong> (Signal / Ground / Power / Signal) for the production board. This provides a continuous ground plane for EMI control and simplifies routing.</li>
+<li>Add <strong>ESD protection</strong> (TVS diodes) on the USB-C connector, UART lines, and any external-facing connectors.</li>
+<li>Add <strong>reverse polarity protection</strong> (P-channel MOSFET) on the battery input.</li>
+<li>Recommended fabricators: <strong>JLCPCB</strong> (lowest cost, fast turnaround), <strong>OSHPark</strong> (higher quality, US-based), or local Indian PCB shops for rapid iteration.</li>
+</ul>
+<hr />
+<h2 id="5-mechanical-assembly-instructions">5. Mechanical Assembly Instructions</h2>
+<h3 id="phase-1-part-fabrication-and-preparation">Phase 1: Part Fabrication and Preparation</h3>
+<ol>
+<li><strong>3D print all mechanical parts.</strong> Use PETG filament (preferred for chemical resistance and moderate heat tolerance) or ABS. Print internal parts (cable frame, mounts) in black to minimize internal reflections. Print the enclosure base and cover in the desired product color (white or light gray recommended for a clinical appearance).</li>
+<li><strong>Install M3 heat-set inserts</strong> into the four corner mounting holes of the enclosure base. Use a soldering iron set to 220C with a heat-set insert tip. Press each insert flush with the surface.</li>
+<li><strong>Apply flocking material.</strong> Cut self-adhesive flocking sheet to fit the interior surfaces of the measurement chamber (the area around the camera and LED mount). Peel and apply, pressing firmly to remove air bubbles.</li>
+<li><strong>Prepare the dipstick tray.</strong> Attach the color calibration card and white balance card to their respective recesses on the tray surface using thin double-sided adhesive tape.</li>
+<li><strong>Install optical elements.</strong> Press-fit the quartz glass window into the camera mount aperture. Press-fit the frosted acrylic diffuser into the LED mount slot.</li>
+</ol>
+<h3 id="phase-2-electrical-wiring">Phase 2: Electrical Wiring</h3>
+<p><strong>Power chain (wire first, verify before connecting MCU):</strong></p>
+<ol>
+<li>Solder the LiPo battery connector to the MCP73833 USB-C charger board input.</li>
+<li>Connect charger board output to the input of both buck-boost regulators (Pololu S13V25F9 for 9V/5V and Pololu S7V8F3 for 3.3V). Use a solder-bridge jumper or small slide switch for a master power cutoff.</li>
+<li>Route regulator outputs to the power distribution PCB input terminals.</li>
+</ol>
+<p><strong>3.3V rail distribution (from power PCB):</strong></p>
+<ol>
+<li>ESP32-S3 DevKit 3.3V pin, SSD1306 OLED VCC, SHT31-D VCC, BH1750 VCC, GM65 barcode scanner VCC, SD card module VCC, tactile button pull-up, RGB LED anodes (via current-limiting resistors), buzzer logic supply.</li>
+</ol>
+<p><strong>5V rail distribution:</strong></p>
+<ol>
+<li>Fan positive (through 2N7000 MOSFET drain), UV-C LED anode (through IRLZ44N MOSFET drain with appropriate current-limiting resistor -- calculate based on UV LED forward voltage and desired drive current), polyimide heater (through IRLZ44N MOSFET drain), white LED array VCC.</li>
+</ol>
+<p><strong>9V rail:</strong></p>
+<ol>
+<li>A4988 stepper driver VMOT pin (with 100uF decoupling capacitor across VMOT and GND).</li>
+</ol>
+<p><strong>Signal wiring:</strong></p>
+<ol>
+<li><strong>I2C bus:</strong> Wire GPIO18 (SCL) and GPIO19 (SDA) from ESP32 to SSD1306, SHT31-D, and BH1750 in a daisy-chain topology. Install 4.7K ohm pull-up resistors from SCL and SDA to 3.3V at the ESP32 end of the bus.</li>
+<li><strong>SPI bus:</strong> Wire GPIO38 (MOSI), GPIO39 (MISO), GPIO40 (SCK), GPIO41 (CS) to the SD card module.</li>
+<li><strong>Stepper driver:</strong> Wire GPIO4 to A4988 STEP input, GPIO16 to A4988 DIR input. Connect A4988 motor outputs (1A, 1B, 2A, 2B) to NEMA 17 motor windings per the motor datasheet.</li>
+<li><strong>MOSFET gates:</strong> Wire ESP32 GPIOs to each MOSFET gate via 100 ohm series resistor. Install 10K ohm pull-down resistors from each gate to ground.</li>
+<li><strong>Camera DVP bus:</strong> Connect OV2640 module to ESP32-S3 DVP pins per the ESP32-S3 camera pinout reference. This is typically an 8-bit parallel data bus plus PCLK, VSYNC, HREF, XCLK, SIOD, and SIOC.</li>
+<li><strong>Barcode scanner UART:</strong> Wire GM65 TX to ESP32 GPIO44 (RX), GM65 RX to ESP32 GPIO43 (TX).</li>
+<li><strong>Safety interlock:</strong> Wire MC-38 reed switch between GPIO21 and ground (enable internal pull-up in firmware).</li>
+<li><strong>Limit switch:</strong> Wire micro limit switch between GPIO15 and ground (enable internal pull-up in firmware).</li>
+<li><strong>Thermistor:</strong> Wire 10K NTC in a voltage divider (10K NTC + 10K fixed resistor) to an ESP32 ADC-capable GPIO.</li>
+<li><strong>Button:</strong> Wire tactile switch between a GPIO and ground (enable internal pull-up).</li>
+<li><strong>Buzzer:</strong> Wire to a GPIO (active buzzer, digital HIGH = ON).</li>
+<li><strong>RGB LED:</strong> Wire each color channel (R, G, B) through a 330 ohm current-limiting resistor to individual ESP32 GPIOs. Common anode connects to 3.3V.</li>
+</ol>
+<h3 id="phase-3-bring-up-and-verification">Phase 3: Bring-Up and Verification</h3>
+<ol>
+<li><strong>Power rail verification.</strong> Before connecting the ESP32 or any sensor modules, power on the system and measure all rails with a multimeter: 3.3V (+/- 0.1V), 5V (+/- 0.25V), 9V (+/- 0.5V). Verify that MOSFETs are OFF (gate pull-downs holding loads off).</li>
+<li><strong>Flash firmware.</strong> Connect ESP32-S3 via USB-C and flash the firmware using <code>idf.py flash</code> (ESP-IDF) or Arduino IDE upload.</li>
+<li><strong>I2C device scan.</strong> Run an I2C scanner sketch to verify all three devices respond: OLED at 0x3C, SHT31 at 0x44, BH1750 at 0x23.</li>
+<li><strong>Stepper calibration.</strong> Command the stepper to advance slowly until the limit switch triggers. Record the step count as the home position. Measure the total travel from home to the camera imaging position and program the target step count.</li>
+<li><strong>Camera test.</strong> Initialize the OV2640 in JPEG mode, capture a test frame, and verify image quality on the OLED or via serial output to a PC.</li>
+<li><strong>White balance calibration.</strong> Capture an image of the white balance card under LED illumination. Record the reference RGB values and store in NVS flash.</li>
+<li><strong>Heater PID tuning.</strong> Enable the heater and monitor the thermistor reading. Tune PID constants (Kp, Ki, Kd) to achieve a stable 37C setpoint with less than 1C overshoot. This temperature optimizes enzyme reaction kinetics on the reagent pads.</li>
+<li><strong>UV-C interlock test.</strong> With the tray extended (chamber open), attempt to activate the UV-C LED via firmware. Verify that the reed switch interlock prevents activation. Retract the tray (chamber closed) and verify UV-C activates.</li>
+<li><strong>Barcode scanner test.</strong> Present a QR code to the GM65 module and verify UART data reception on the ESP32.</li>
+</ol>
+<h3 id="phase-4-final-assembly">Phase 4: Final Assembly</h3>
+<ol>
+<li>Mount the ESP32 DevKit and power distribution PCB to the cable management frame using M2.5 standoffs and M2x6mm screws.</li>
+<li>Install the tray mechanism: attach the NEMA 17 motor to the enclosure base, install the T8 lead screw through the tray nut, and verify smooth linear travel.</li>
+<li>Secure the camera/LED mount to the enclosure base above the tray imaging position. Verify alignment by capturing a test image of a dipstick on the tray.</li>
+<li>Mount the GM65 scanner bracket at the tray entry point.</li>
+<li>Route all wiring through the cable management frame channels. Use small cable ties or adhesive clips to secure loose wires away from moving tray parts.</li>
+<li>Install the silicone gasket around the perimeter of the measurement chamber opening.</li>
+<li>Install EPDM foam gaskets around the UV-C LED zone to seal UV light leakage paths.</li>
+<li>Install the vent grill in the enclosure wall (snap-fit design) and mount the 30mm fan behind it.</li>
+<li>Place the enclosure top cover and secure with four M3x8mm screws into the heat-set inserts.</li>
+<li>Perform a final functional test: full measurement cycle (insert strip, press button, capture, analyze, display, sterilize).</li>
+</ol>
+<hr />
+<h2 id="6-firmware-overview">6. Firmware Overview</h2>
+<h3 id="61-architecture">6.1 Architecture</h3>
+<ul>
+<li><strong>Platform:</strong> ESP-IDF v5.x (recommended for full hardware control and PSRAM management) or Arduino-ESP32 core for faster prototyping.</li>
+<li><strong>Processor:</strong> ESP32-S3 dual-core Xtensa LX7 at 240 MHz.</li>
+<li><strong>Memory:</strong> 8MB PSRAM (external, accessed via OPI interface) is essential for holding camera frame buffers. A single 1600x1200 RGB565 frame consumes approximately 3.75 MB. PSRAM also holds the color lookup tables and image processing buffers.</li>
+<li><strong>Storage:</strong> Internal NVS (Non-Volatile Storage) partition for calibration coefficients, device settings, and usage counters. External Micro SD card for CSV data logging.</li>
+</ul>
+<h3 id="62-state-machine">6.2 State Machine</h3>
+<p>The main firmware loop operates as a state machine with the following states:</p>
+<pre><code>IDLE --&gt; SCAN_BARCODE --&gt; WAIT_REACTION --&gt; CAPTURE --&gt; ANALYZE --&gt; DISPLAY --&gt; LOG --&gt; STERILIZE --&gt; IDLE
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>State</th>
+<th>Description</th>
+<th>Duration</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>IDLE</td>
+<td>Awaiting button press, showing status on OLED</td>
+<td>Indefinite</td>
+</tr>
+<tr>
+<td>SCAN_BARCODE</td>
+<td>Optional: scan patient ID or reagent lot QR code</td>
+<td>5 seconds timeout</td>
+</tr>
+<tr>
+<td>WAIT_REACTION</td>
+<td>Countdown timer for reagent reaction (60--120 sec)</td>
+<td>Configurable</td>
+</tr>
+<tr>
+<td>CAPTURE</td>
+<td>Advance tray, turn on LED, capture camera image</td>
+<td>~2 seconds</td>
+</tr>
+<tr>
+<td>ANALYZE</td>
+<td>ROI extraction, color quantification, classification</td>
+<td>~3 seconds</td>
+</tr>
+<tr>
+<td>DISPLAY</td>
+<td>Show results on OLED, beep buzzer for completion</td>
+<td>Until dismissed</td>
+</tr>
+<tr>
+<td>LOG</td>
+<td>Write CSV record to SD card</td>
+<td>&lt;1 second</td>
+</tr>
+<tr>
+<td>STERILIZE</td>
+<td>Retract tray, run UV-C for 30 seconds</td>
+<td>30 seconds</td>
+</tr>
+</tbody>
+</table>
+<h3 id="63-key-firmware-modules">6.3 Key Firmware Modules</h3>
+<ol>
+<li>
+<p><strong>Camera Driver</strong> -- OV2640 initialization via SCCB (I2C-like) protocol, register configuration for resolution, exposure, gain, white balance. DVP capture in RGB565 mode for color analysis or JPEG mode for storage. Frame buffer allocated in PSRAM.</p>
+</li>
+<li>
+<p><strong>Image Processing</strong> -- ROI extraction using predefined pixel coordinates for each of the 10 reagent pads (coordinates determined during calibration setup). Median filter (3x3 kernel) applied within each ROI to reject salt-and-pepper noise. RGB-to-HSV conversion for each pad region. Mean H, S, V values computed for the ROI.</p>
+</li>
+<li>
+<p><strong>Color Analysis</strong> -- Each pad's measured HSV triplet is compared against a calibration lookup table stored in NVS. The lookup table contains HSV values for each concentration level (typically 5--7 levels per analyte). A polynomial curve fit (second or third order) interpolates between calibration points to determine the analyte concentration. The result is then classified into the nearest semiquantitative category.</p>
+</li>
+<li>
+<p><strong>Calibration Engine</strong> -- Manages factory calibration data, daily QC validation, and field recalibration. Stores per-pad polynomial coefficients, temperature compensation factors, and white balance reference values in NVS flash. Provides an OLED-guided recalibration workflow.</p>
+</li>
+<li>
+<p><strong>Stepper Control</strong> -- Uses the AccelStepper library (or equivalent ESP-IDF driver) for smooth acceleration/deceleration profiles. Homing sequence runs at startup: the stepper retracts until the limit switch triggers, then the step counter resets to zero. Target positions for each pad are stored as step offsets from home.</p>
+</li>
+<li>
+<p><strong>Thermal Control</strong> -- PID control loop for the polyimide heater. Setpoint: 37C (body temperature, optimal for most dipstick enzyme reactions). Process variable: NTC thermistor reading via ADC. Control output: PWM duty cycle to the heater MOSFET. Ambient temperature and humidity monitored by SHT31-D for environmental compensation.</p>
+</li>
+<li>
+<p><strong>Display Manager</strong> -- SSD1306 OLED driver (using U8g2 or Adafruit SSD1306 library). Implements a menu system: main results screen, scrollable parameter list, history browser, settings menu, calibration mode, and QC status display. 128x64 pixel resolution constrains layout to compact, text-focused interfaces.</p>
+</li>
+<li>
+<p><strong>Data Logger</strong> -- Writes CSV records to the Micro SD card via SPI. Each record contains: timestamp (from RTC or NTP if WiFi available), patient ID (from barcode scanner), all 10 parameter results (semiquantitative category and raw HSV values), ambient temperature, humidity, and QC status flag.</p>
+</li>
+<li>
+<p><strong>Barcode Scanner Interface</strong> -- GM65 UART protocol handler. Parses scanned QR codes or barcodes for patient ID strings and reagent lot numbers. Lot numbers enable automatic selection of the correct calibration table if multiple strip brands are supported.</p>
+</li>
+<li>
+<p><strong>Safety Manager</strong> -- Continuously monitors: reed switch state (UV interlock), thermistor for over-temperature (shutdown heater above 50C), battery voltage via ADC (low-battery warning below 3.4V, shutdown below 3.2V), ambient light level (measurement inhibit if chamber is not dark).</p>
+</li>
+</ol>
+<h3 id="64-measurement-workflow-detailed">6.4 Measurement Workflow (Detailed)</h3>
+<ol>
+<li>User places urine-wetted dipstick on tray and presses the Measure button.</li>
+<li>(Optional) GM65 scans patient ID barcode if present on the strip packaging or a label.</li>
+<li>OLED displays a countdown timer for the reagent reaction period (configurable, default 120 seconds for most commercial strips).</li>
+<li>When the timer expires, the stepper motor advances the tray into the measurement chamber.</li>
+<li>The limit switch confirms the tray has cleared the aperture; the reed switch confirms chamber closure.</li>
+<li>The white LED array is powered on. The firmware waits 200 ms for LED thermal stabilization.</li>
+<li>The BH1750 sensor confirms illumination levels are within the expected range.</li>
+<li>The OV2640 captures a single frame in RGB565 mode, stored in PSRAM.</li>
+<li>The white LED is turned off.</li>
+<li>The firmware identifies the calibration card region in the image, measures its RGB values, and computes a per-channel gain correction relative to the stored reference values.</li>
+<li>For each of the 10 reagent pads, the firmware extracts the ROI, applies median filtering, converts to HSV, and applies the gain correction.</li>
+<li>Each pad's corrected HSV values are mapped to an analyte concentration via the stored polynomial calibration curves.</li>
+<li>Concentrations are classified into semiquantitative categories.</li>
+<li>Results are displayed on the OLED.</li>
+<li>A CSV record is appended to the SD card.</li>
+<li>The buzzer sounds a completion tone.</li>
+<li>The stepper retracts the tray to the home position (UV-C zone).</li>
+<li>The UV-C LED activates for 30 seconds (with interlock verification).</li>
+<li>The UV-C LED turns off, and the system returns to IDLE.</li>
+</ol>
+<hr />
+<h2 id="7-calibration-procedure">7. Calibration Procedure</h2>
+<h3 id="71-initial-factory-calibration">7.1 Initial Factory Calibration</h3>
+<p>Factory calibration establishes the baseline color-to-concentration mapping for each analyte. This must be performed once during manufacturing, using manufacturer-supplied calibration strips with known analyte concentrations.</p>
+<p><strong>Step 1: White Balance</strong></p>
+<ol>
+<li>Insert a blank (unreacted) dipstick strip onto the tray.</li>
+<li>Run the measurement sequence.</li>
+<li>Record the RGB values for the white balance card region. These become the reference white point.</li>
+<li>Record the RGB values for each unreacted pad. These become the "negative" baseline for each analyte.</li>
+<li>Store all reference values in NVS flash.</li>
+</ol>
+<p><strong>Step 2: Multi-Level Calibration</strong></p>
+<p>For each of the 10 analytes, measure calibration strips at 5 known concentration levels:</p>
+<table>
+<thead>
+<tr>
+<th>Level</th>
+<th>Example (Glucose)</th>
+<th>Example (Protein)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Level 0 (Negative)</td>
+<td>0 mg/dL</td>
+<td>0 mg/dL</td>
+</tr>
+<tr>
+<td>Level 1 (Trace/Low)</td>
+<td>100 mg/dL</td>
+<td>15 mg/dL</td>
+</tr>
+<tr>
+<td>Level 2 (Moderate)</td>
+<td>250 mg/dL</td>
+<td>30 mg/dL</td>
+</tr>
+<tr>
+<td>Level 3 (High)</td>
+<td>500 mg/dL</td>
+<td>100 mg/dL</td>
+</tr>
+<tr>
+<td>Level 4 (Very High)</td>
+<td>2000 mg/dL</td>
+<td>2000 mg/dL</td>
+</tr>
+</tbody>
+</table>
+<p>For each level, capture the image and record the H, S, V values for the corresponding pad. This yields a 5-point calibration dataset per analyte.</p>
+<p><strong>Step 3: Curve Fitting</strong></p>
+<p>Fit a second-order polynomial to each analyte's calibration data:</p>
+<pre><code>Concentration = a0 + a1*H + a2*S + a3*V + a4*H^2 + a5*S^2 + a6*V^2
+</code></pre>
+<p>The coefficients (a0 through a6) are stored in NVS flash. At measurement time, the firmware evaluates this polynomial with the measured H, S, V values to determine the concentration.</p>
+<p><strong>Step 4: Linearity Verification</strong></p>
+<p>After curve fitting, verify monotonicity: as the known concentration increases, the predicted concentration must also increase without sign reversals. Non-monotonic behavior indicates a bad calibration point or an inappropriate polynomial order.</p>
+<p><strong>Step 5: Temperature Compensation</strong></p>
+<p>Repeat the full calibration at four temperatures: 20C, 25C, 30C, and 35C (controlled by the internal heater and SHT31 monitoring). Derive linear temperature correction factors for each analyte:</p>
+<pre><code>Corrected_Concentration = Raw_Concentration * (1 + Kt * (T_measured - T_reference))
+</code></pre>
+<p>Store the temperature coefficient Kt for each analyte in NVS.</p>
+<h3 id="72-daily-quality-control">7.2 Daily Quality Control</h3>
+<ol>
+<li>At the start of each operating day, the operator inserts a provided QC calibration strip with known analyte values.</li>
+<li>The device runs a standard measurement cycle and compares the results against the expected values stored in firmware.</li>
+<li>If all 10 parameters fall within +/- 10% of expected values, the QC passes and normal operation is enabled.</li>
+<li>If any parameter deviates more than 10%, the OLED displays a QC FAIL warning and prompts the operator to run a field recalibration.</li>
+<li>QC results (pass/fail, deviations for each parameter) are logged to the SD card with a QC flag.</li>
+</ol>
+<h3 id="73-field-recalibration">7.3 Field Recalibration</h3>
+<ol>
+<li>The operator accesses calibration mode via the OLED menu (long-press the button for 3 seconds).</li>
+<li>On-screen prompts guide insertion of calibration strips at each concentration level.</li>
+<li>The firmware captures and processes each strip, then recomputes the polynomial coefficients.</li>
+<li>Updated coefficients are stored in NVS, overwriting the previous values.</li>
+<li>A verification pass automatically runs: the operator inserts one additional calibration strip, and the firmware confirms the new coefficients produce results within specification.</li>
+</ol>
+<hr />
+<h2 id="8-regulatory-considerations-for-india-cdsco-mdr-2017">8. Regulatory Considerations for India (CDSCO / MDR 2017)</h2>
+<h3 id="81-device-classification">8.1 Device Classification</h3>
+<p>Under India's <strong>Medical Devices Rules, 2017</strong> (MDR 2017), administered by the <strong>Central Drugs Standard Control Organization (CDSCO)</strong>, this device is classified as a <strong>Class B In-Vitro Diagnostic (IVD) Medical Device</strong> (moderate risk). The classification is based on:</p>
+<ul>
+<li>The device performs in-vitro analysis of human biological specimens (urine).</li>
+<li>Results are used for screening and monitoring, not as sole confirmatory diagnostic evidence.</li>
+<li>The device does not involve invasive contact with the patient.</li>
+<li>Urine dipstick analyzers are explicitly categorized under moderate-risk IVD devices in the CDSCO classification guidelines.</li>
+</ul>
+<h3 id="82-registration-process">8.2 Registration Process</h3>
+<p><strong>Step 1: Manufacturing License (Form MD-1)</strong></p>
+<ul>
+<li><strong>Applicant:</strong> The manufacturing entity (company or individual).</li>
+<li><strong>Authority:</strong> State Drug Licensing Authority of the state where the manufacturing facility is located.</li>
+<li><strong>Requirements:</strong> GMP-compliant manufacturing facility, qualified technical staff, documented manufacturing process, quality control laboratory.</li>
+<li><strong>Fee:</strong> INR 5,000 -- 10,000 (approximately USD 60 -- 120).</li>
+<li><strong>Timeline:</strong> 2 -- 3 months from application to issuance.</li>
+</ul>
+<p><strong>Step 2: Product Registration (Form MD-6)</strong></p>
+<ul>
+<li><strong>Authority:</strong> CDSCO, New Delhi (online submission via the SUGAM portal).</li>
+<li><strong>Required Documentation:</strong></li>
+<li>Device Master File (description, intended use, specifications)</li>
+<li>Technical documentation (design files, schematics, firmware description)</li>
+<li>Risk analysis per ISO 14971 (FMEA, hazard analysis, risk mitigation)</li>
+<li>Performance evaluation data (analytical sensitivity, specificity, precision, accuracy studies comparing against a predicate device)</li>
+<li>Clinical evidence or literature review demonstrating clinical validity of urine dipstick analysis</li>
+<li>QMS certificate (ISO 13485:2016)</li>
+<li>Labeling and Instructions for Use (IFU) drafts</li>
+<li>Declaration of conformity</li>
+<li><strong>Fee:</strong> INR 10,000 -- 50,000 (approximately USD 120 -- 600), depending on device sub-class.</li>
+<li><strong>Timeline:</strong> 6 -- 12 months. CDSCO may request additional data or clarification, which can extend the timeline.</li>
+</ul>
+<p><strong>Step 3: Quality Management System Certification</strong></p>
+<ul>
+<li><strong>Standard:</strong> ISO 13485:2016 (Medical Devices -- Quality Management Systems)</li>
+<li><strong>Certification Bodies:</strong> TUV SUD, BSI, SGS, or Bureau Veritas (must be accredited notified bodies).</li>
+<li><strong>Cost:</strong> USD 5,000 -- 15,000 for initial certification audit, plus annual surveillance audit fees (USD 2,000 -- 5,000).</li>
+<li><strong>Scope:</strong> Covers design controls, document management, supplier management, production controls, CAPA, and post-market surveillance.</li>
+</ul>
+<h3 id="83-standards-compliance">8.3 Standards Compliance</h3>
+<p>The following standards apply to the design, manufacture, and testing of this device:</p>
+<table>
+<thead>
+<tr>
+<th>Standard</th>
+<th>Title</th>
+<th>Applicability</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>IEC 61010-1</td>
+<td>Safety for electrical equipment for measurement, control, and laboratory use</td>
+<td>General safety requirements</td>
+</tr>
+<tr>
+<td>IEC 61010-2-101</td>
+<td>Particular requirements for IVD medical equipment</td>
+<td>IVD-specific safety requirements</td>
+</tr>
+<tr>
+<td>ISO 14971</td>
+<td>Application of risk management to medical devices</td>
+<td>Risk analysis (FMEA, FTA)</td>
+</tr>
+<tr>
+<td>IEC 62304</td>
+<td>Medical device software -- Software lifecycle processes</td>
+<td>Firmware development lifecycle</td>
+</tr>
+<tr>
+<td>ISO 13485</td>
+<td>Quality management systems for medical devices</td>
+<td>Manufacturing QMS</td>
+</tr>
+<tr>
+<td>CLSI GP16-A3</td>
+<td>Urinalysis -- Approved Guideline</td>
+<td>Analytical methodology, QC requirements</td>
+</tr>
+<tr>
+<td>IEC 62471</td>
+<td>Photobiological safety of lamps and lamp systems</td>
+<td>UV-C LED safety assessment</td>
+</tr>
+</tbody>
+</table>
+<h3 id="84-labeling-requirements-mdr-2017">8.4 Labeling Requirements (MDR 2017)</h3>
+<p>All labels, packaging, and Instructions for Use must include:</p>
+<ul>
+<li>Device name and model number</li>
+<li>Manufacturer name, address, and contact information</li>
+<li>"For In-Vitro Diagnostic Use Only" (prominently displayed)</li>
+<li>Batch or lot number</li>
+<li>Date of manufacture</li>
+<li>Expiry date or shelf life (if applicable to consumables)</li>
+<li>Storage and operating conditions (temperature, humidity)</li>
+<li>CDSCO registration number (after approval)</li>
+<li>Unique Device Identification (UDI) number</li>
+<li>CE or BIS mark (if applicable)</li>
+<li>Instructions in <strong>English and Hindi</strong> (minimum two languages)</li>
+<li>Caution: "UV-C radiation source -- do not operate with tray open"</li>
+<li>Electrical safety symbols per IEC 60417</li>
+</ul>
+<h3 id="85-post-market-requirements">8.5 Post-Market Requirements</h3>
+<ul>
+<li><strong>Adverse Event Reporting:</strong> Mandatory reporting to CDSCO within 10 days for serious incidents.</li>
+<li><strong>Field Safety Corrective Actions (FSCA):</strong> Documented procedure for recalls or safety notices.</li>
+<li><strong>Post-Market Surveillance:</strong> Periodic review of device performance, customer complaints, and QC data.</li>
+<li><strong>Annual License Renewal:</strong> Manufacturing license must be renewed annually with the state licensing authority.</li>
+</ul>
+<h3 id="86-market-positioning-and-pricing">8.6 Market Positioning and Pricing</h3>
+<table>
+<thead>
+<tr>
+<th>Competing Device</th>
+<th>Approximate Price (INR)</th>
+<th>Origin</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Siemens Clinitek Status+</td>
+<td>80,000 -- 1,20,000</td>
+<td>Imported (Germany)</td>
+</tr>
+<tr>
+<td>Arkray PocketChem UA</td>
+<td>60,000 -- 80,000</td>
+<td>Imported (Japan)</td>
+</tr>
+<tr>
+<td>Mission U120</td>
+<td>35,000 -- 50,000</td>
+<td>Imported (China)</td>
+</tr>
+<tr>
+<td><strong>This Device (Target)</strong></td>
+<td><strong>15,000 -- 20,000</strong></td>
+<td><strong>Domestic (India)</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The target price of INR 15,000 -- 20,000 represents a 60 -- 80% cost reduction versus imported alternatives. This is achievable due to: local manufacturing (no import duties, lower logistics costs), ESP32-based platform (low-cost MCU versus proprietary ASICs), 3D-printed or locally injection-molded enclosure (versus imported housings), and simplified optical design (single camera versus multi-LED reflectance arrays). The target market includes primary health centers (PHCs), community health centers (CHCs), diagnostic laboratories, and point-of-care clinics across rural and semi-urban India, where imported analyzers are cost-prohibitive.</p>
+<hr />
+<p><em>End of Build Report</em></p></body></html>
