@@ -48,7 +48,7 @@
 
 // --- MOSFET Gates ---
 #define PIN_FAN_GATE    2
-#define PIN_HEATER_GATE 47
+#define PIN_HEATER_GATE 4   // was 47 (collided with CAM_D3)
 #define PIN_UV_GATE     20
 
 // --- White LED Array ---
@@ -72,8 +72,8 @@
 #define PIN_BUZZER      43
 
 // --- Barcode Scanner (UART) ---
-#define BARCODE_TX      44
-#define BARCODE_RX       3
+#define BARCODE_TX      16  // was 44 (UART0 conflict)
+#define BARCODE_RX      18  // was 3 (collided with CAM_D0)
 
 // --- Thermistor (ADC) ---
 #define PIN_THERMISTOR  A0

@@ -110,7 +110,7 @@ Use a 24-conductor flat ribbon (or a pre-made FPC adapter) ≤80mm. Keep PCLK/HR
 +---+----------------+----------------+--------+--------+
 ```
 
-NOTE: GPIO 47 is multiplexed with HEATER_GATE in `config.h` and GPIO 3 with BARCODE_RX. These collisions must be resolved before final firmware flash — the camera, heater, and barcode scanner cannot be powered simultaneously without a mux. Pre-production fix is to move HEATER_GATE → GPIO 6 and barcode UART → GPIO 17/18 alt pins.
+NOTE: GPIO collisions resolved — HEATER_GATE now on GPIO 4, BARCODE_TX on GPIO 16, BARCODE_RX on GPIO 18.
 
 ### HARNESS C — I2C Bus (shared: SHT31, BH1750, DS3231, MAX17048)
 
@@ -283,7 +283,7 @@ If any I2C device is missing from the scan, see Troubleshooting.
 | Heater hits OVERTEMP_C immediately | NTC thermistor disconnected (reads -999) or shorted | Check Harness G pin 6; resistance NTC at 25°C should be 10kΩ ±5% |
 | Boot loops, brownout reset | LiPo too low, or charger not delivering | Charge 30+ min; measure VBAT under load > 3.4V |
 | SD card fails to mount | Wrong SPI bus (TFT and SD share SPI here), CS conflict | Confirm only TFT_CS or SD_CS asserted at any time; format SD as FAT32 |
-| Barcode scanner silent | UART pins shared with cam D0; pin 3 collision | Disable cam during barcode read, or move BARCODE_RX to GPIO 17 alt pin |
+| Barcode scanner silent | Check UART1 wiring on GPIO 16 (TX) / 18 (RX); confirm 9600 baud | Verify GM65 power LED is on; swap TX/RX if scanner doesn't respond |
 
 ---
 
