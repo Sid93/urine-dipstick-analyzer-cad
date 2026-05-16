@@ -11,9 +11,11 @@ public:
     bool enabled = false;
     int dutyCycle = 0;
 
+    static constexpr int LEDC_CH = 0;
     void begin() {
-        ledcAttach(PIN_HEATER_GATE, 1000, 8);
-        ledcWrite(PIN_HEATER_GATE, 0);
+        ledcSetup(LEDC_CH, 1000, 8);
+        ledcAttachPin(PIN_HEATER_GATE, LEDC_CH);
+        ledcWrite(LEDC_CH, 0);
     }
 
     void enable() {
@@ -26,7 +28,7 @@ public:
     void disable() {
         enabled = false;
         dutyCycle = 0;
-        ledcWrite(PIN_HEATER_GATE, 0);
+        ledcWrite(LEDC_CH,0);
     }
 
     bool update(float currentTemp) {
@@ -50,7 +52,7 @@ public:
 
         float output = kp * error + ki * _integral + kd * derivative;
         dutyCycle = constrain((int)output, 0, HEATER_MAX_DUTY);
-        ledcWrite(PIN_HEATER_GATE, dutyCycle);
+        ledcWrite(LEDC_CH,dutyCycle);
 
         return true;
     }
