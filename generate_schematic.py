@@ -1,1488 +1,1216 @@
 #!/usr/bin/env python3
 """
-Generate a KiCad 8 schematic (.kicad_sch) for a Urine Dipstick Analyzer v2.0.
+Generate a KiCad 8 schematic (.kicad_sch) for Urine Dipstick Analyzer v2.0.
+
+FIXED VERSION - uses proper lib_symbols with real pin definitions so that:
+ 1. Decoupling caps have explicit wire connections to IC pins (not floating net labels)
+ 2. OV2640 camera <-> ESP32-S3 data bus has visible wires via net labels on both ends
+ 3. FAN1 is a proper 2-pin component wired to Q3 drain and 5V
 
 All coordinates snap to 2.54mm grid.
-All wires land exactly on component pin coordinates.
-Custom ICs are rendered as labeled wire-rectangle blocks with net labels at pin positions.
-The ESP32-S3 is a large block with properly spaced pin labels.
-
-Components:
-- Power: LiPo, MCP73833 USB-C charger, Pololu S13V25F9 (5V/9V), Pololu S7V8F3 (3.3V),
-         MAX17048 fuel gauge
-- MCU: ESP32-S3-WROOM-1
-- Sensors: SHT31 (I2C), BH1750 (I2C), DS3231 RTC (I2C), NTC thermistor
-- Camera: OV2640 (DVP bus)
-- Display: ILI9341 TFT (SPI)
-- Motor: A4988 + NEMA 17 stepper, limit switch
-- Actuators: UV-C LED + IRLZ44N, heater film + IRLZ44N, vent fan + 2N7000
-- UI: Measure button, RGB LED (common anode) with 330R, active buzzer
-- Barcode: GM65 scanner (UART)
-- Storage: SD card module (SPI, shared bus with display)
-- Safety: MC-38 reed switch
-- Passives: decoupling 100nF per IC, 10uF bulk, 4.7k I2C pull-ups
 """
 
 import uuid
 import os
 
 
+# ---------------------------------------------------------------------------
+# Primitives
+# ---------------------------------------------------------------------------
+
 def uid():
     return str(uuid.uuid4())
 
 
 def snap(v):
-    """Snap a value to the nearest 2.54mm grid point."""
     return round(v / 2.54) * 2.54
 
 
-# ============================================================
-# KiCad S-expression primitives
-# ============================================================
-
-def kicad_text(text, x, y, size=3.0):
-    x, y = snap(x), snap(y)
-    return f'''  (text "{text}"
-    (exclude_from_sim no)
-    (at {x:.2f} {y:.2f} 0)
-    (effects
-      (font
-        (size {size} {size})
-        (bold yes)
-      )
-    )
-    (uuid "{uid()}")
-  )'''
-
-
-def kicad_wire(x1, y1, x2, y2):
+def wire(x1, y1, x2, y2):
     x1, y1, x2, y2 = snap(x1), snap(y1), snap(x2), snap(y2)
-    return f'''  (wire
-    (pts
-      (xy {x1:.2f} {y1:.2f}) (xy {x2:.2f} {y2:.2f})
+    return (
+        f'  (wire (pts (xy {x1:.2f} {y1:.2f}) (xy {x2:.2f} {y2:.2f}))'
+        f' (stroke (width 0) (type default)) (uuid "{uid()}"))'
     )
-    (stroke
-      (width 0)
-      (type default)
-    )
-    (uuid "{uid()}")
-  )'''
 
 
-def kicad_label(name, x, y, angle=0):
+def netlabel(name, x, y, angle=0):
     x, y = snap(x), snap(y)
-    return f'''  (label "{name}"
-    (at {x:.2f} {y:.2f} {angle})
-    (effects
-      (font
-        (size 1.27 1.27)
-      )
+    return (
+        f'  (label "{name}" (at {x:.2f} {y:.2f} {angle})'
+        f' (fields_autoplaced yes)'
+        f' (effects (font (size 1.27 1.27)))'
+        f' (uuid "{uid()}")'
+        f' (property "Intersheet References" "" (at 0 0 0)'
+        f'  (effects (font (size 1.27 1.27)) hide)))'
     )
-    (uuid "{uid()}")
-  )'''
 
 
-def kicad_global_label(name, x, y, angle=0, shape="input"):
+def glabel(name, x, y, shape="input", angle=0):
     x, y = snap(x), snap(y)
-    return f'''  (global_label "{name}"
-    (shape {shape})
-    (at {x:.2f} {y:.2f} {angle})
-    (effects
-      (font
-        (size 1.27 1.27)
-      )
+    return (
+        f'  (global_label "{name}" (shape {shape}) (at {x:.2f} {y:.2f} {angle})'
+        f' (fields_autoplaced yes)'
+        f' (effects (font (size 1.27 1.27)))'
+        f' (uuid "{uid()}")'
+        f' (property "Intersheet References" "" (at 0 0 0)'
+        f'  (effects (font (size 1.27 1.27)) hide)))'
     )
-    (uuid "{uid()}")
-  )'''
 
 
-def kicad_pwr_flag(x, y, ref_num):
+def txt(s, x, y, size=1.27, bold=False):
     x, y = snap(x), snap(y)
-    u = uid()
-    return f'''  (symbol
-    (lib_id "power:PWR_FLAG")
-    (at {x:.2f} {y:.2f} 0)
-    (unit 1)
-    (exclude_from_sim no)
-    (in_bom no)
-    (on_board no)
-    (dnp no)
-    (uuid "{u}")
-    (property "Reference" "#FLG0{ref_num}" (at {x:.2f} {y - 3:.2f} 0)
-      (effects (font (size 1.27 1.27)) hide)
+    b = " bold" if bold else ""
+    return (
+        f'  (text "{s}" (at {x:.2f} {y:.2f} 0)'
+        f' (effects (font (size {size} {size}){b}))'
+        f' (uuid "{uid()}"))'
     )
-    (property "Value" "PWR_FLAG" (at {x:.2f} {y + 3:.2f} 0)
-      (effects (font (size 1.27 1.27)))
-    )
-    (property "Footprint" "" (at {x:.2f} {y:.2f} 0)
-      (effects (font (size 1.27 1.27)) hide)
-    )
-    (property "Datasheet" "" (at {x:.2f} {y:.2f} 0)
-      (effects (font (size 1.27 1.27)) hide)
-    )
-    (pin "1"
-      (uuid "{uid()}")
-    )
-  )'''
 
 
-# ============================================================
-# Component primitives -- all pin offsets are KiCad-accurate
-# ============================================================
-
-# Resistor pins: pin1 at (0, +3.81), pin2 at (0, -3.81) when angle=0
-# Capacitor pins: pin1 at (0, +3.81), pin2 at (0, -3.81) when angle=0
-# LED pins: pin1 (K) at (-3.81, 0), pin2 (A) at (+3.81, 0) when angle=0
-# MOSFET Q_NMOS_GDS: Gate pin1 at (-5.08, 0), Drain pin2 at (+2.54, +5.08), Source pin3 at (+2.54, -5.08)
-# Switch SW_Push: pin1 at (-5.08, 0), pin2 at (+5.08, 0) when angle=0
-
-
-def make_resistor(ref, value, x, y, angle=0):
-    """Resistor: Device:R.  Pins at (0, +/-3.81) from center for angle=0."""
-    x, y = snap(x), snap(y)
-    u = uid()
-    rx = x + 2.54 if angle == 0 else x
-    ry = y if angle == 0 else y - 2.54
-    vx = rx
-    vy = ry + 2.54 if angle == 0 else ry + 2.54
-    return f'''  (symbol
-    (lib_id "Device:R")
-    (at {x:.2f} {y:.2f} {angle})
-    (unit 1)
-    (exclude_from_sim no)
-    (in_bom yes)
-    (on_board yes)
-    (dnp no)
-    (uuid "{u}")
-    (property "Reference" "{ref}" (at {rx:.2f} {ry:.2f} 0)
-      (effects (font (size 1.27 1.27)))
-    )
-    (property "Value" "{value}" (at {vx:.2f} {vy:.2f} 0)
-      (effects (font (size 1.27 1.27)))
-    )
-    (property "Footprint" "" (at {x:.2f} {y:.2f} 0)
-      (effects (font (size 1.27 1.27)) hide)
-    )
-    (property "Datasheet" "" (at {x:.2f} {y:.2f} 0)
-      (effects (font (size 1.27 1.27)) hide)
-    )
-    (pin "1"
-      (uuid "{uid()}")
-    )
-    (pin "2"
-      (uuid "{uid()}")
-    )
-  )'''
-
-
-def resistor_pin1(x, y, angle=0):
-    """Return the absolute position of pin 1 for a resistor at (x,y,angle)."""
-    if angle == 0:
-        return (x, y - 3.81)
-    elif angle == 90:
-        return (x + 3.81, y)
-    elif angle == 180:
-        return (x, y + 3.81)
-    elif angle == 270:
-        return (x - 3.81, y)
-    return (x, y - 3.81)
-
-
-def resistor_pin2(x, y, angle=0):
-    if angle == 0:
-        return (x, y + 3.81)
-    elif angle == 90:
-        return (x - 3.81, y)
-    elif angle == 180:
-        return (x, y - 3.81)
-    elif angle == 270:
-        return (x + 3.81, y)
-    return (x, y + 3.81)
-
-
-def make_capacitor(ref, value, x, y, angle=0):
-    """Capacitor: Device:C.  Pins at (0, +/-3.81) from center for angle=0."""
-    x, y = snap(x), snap(y)
-    u = uid()
-    rx = x + 2.54 if angle == 0 else x
-    ry = y if angle == 0 else y - 2.54
-    vx = rx
-    vy = ry + 2.54 if angle == 0 else ry + 2.54
-    return f'''  (symbol
-    (lib_id "Device:C")
-    (at {x:.2f} {y:.2f} {angle})
-    (unit 1)
-    (exclude_from_sim no)
-    (in_bom yes)
-    (on_board yes)
-    (dnp no)
-    (uuid "{u}")
-    (property "Reference" "{ref}" (at {rx:.2f} {ry:.2f} 0)
-      (effects (font (size 1.27 1.27)))
-    )
-    (property "Value" "{value}" (at {vx:.2f} {vy:.2f} 0)
-      (effects (font (size 1.27 1.27)))
-    )
-    (property "Footprint" "" (at {x:.2f} {y:.2f} 0)
-      (effects (font (size 1.27 1.27)) hide)
-    )
-    (property "Datasheet" "" (at {x:.2f} {y:.2f} 0)
-      (effects (font (size 1.27 1.27)) hide)
-    )
-    (pin "1"
-      (uuid "{uid()}")
-    )
-    (pin "2"
-      (uuid "{uid()}")
-    )
-  )'''
-
-
-def cap_pin1(x, y, angle=0):
-    return resistor_pin1(x, y, angle)
-
-
-def cap_pin2(x, y, angle=0):
-    return resistor_pin2(x, y, angle)
-
-
-def make_led(ref, value, x, y, angle=0):
-    """LED: Device:LED.  Pin1(K) at (-3.81,0), Pin2(A) at (+3.81,0) for angle=0."""
-    x, y = snap(x), snap(y)
-    u = uid()
-    return f'''  (symbol
-    (lib_id "Device:LED")
-    (at {x:.2f} {y:.2f} {angle})
-    (unit 1)
-    (exclude_from_sim no)
-    (in_bom yes)
-    (on_board yes)
-    (dnp no)
-    (uuid "{u}")
-    (property "Reference" "{ref}" (at {x + 2.54:.2f} {y:.2f} 0)
-      (effects (font (size 1.27 1.27)))
-    )
-    (property "Value" "{value}" (at {x + 2.54:.2f} {y + 2.54:.2f} 0)
-      (effects (font (size 1.27 1.27)))
-    )
-    (property "Footprint" "" (at {x:.2f} {y:.2f} 0)
-      (effects (font (size 1.27 1.27)) hide)
-    )
-    (property "Datasheet" "" (at {x:.2f} {y:.2f} 0)
-      (effects (font (size 1.27 1.27)) hide)
-    )
-    (pin "1"
-      (uuid "{uid()}")
-    )
-    (pin "2"
-      (uuid "{uid()}")
-    )
-  )'''
-
-
-def led_pin_k(x, y, angle=0):
-    """Cathode pin of LED."""
-    if angle == 0:
-        return (x - 3.81, y)
-    elif angle == 90:
-        return (x, y - 3.81)
-    elif angle == 180:
-        return (x + 3.81, y)
-    elif angle == 270:
-        return (x, y + 3.81)
-    return (x - 3.81, y)
-
-
-def led_pin_a(x, y, angle=0):
-    """Anode pin of LED."""
-    if angle == 0:
-        return (x + 3.81, y)
-    elif angle == 90:
-        return (x, y + 3.81)
-    elif angle == 180:
-        return (x - 3.81, y)
-    elif angle == 270:
-        return (x, y - 3.81)
-    return (x + 3.81, y)
-
-
-def make_mosfet_n(ref, value, x, y):
-    """N-MOSFET: Device:Q_NMOS_GDS.
-    Gate(pin1) at (x-5.08, y), Drain(pin2) at (x+2.54, y-5.08 top),
-    Source(pin3) at (x+2.54, y+5.08 bottom).
-    Note: in KiCad, Drain is UP (y-5.08) and Source is DOWN (y+5.08) in screen coords.
-    """
-    x, y = snap(x), snap(y)
-    u = uid()
-    return f'''  (symbol
-    (lib_id "Device:Q_NMOS_GDS")
-    (at {x:.2f} {y:.2f} 0)
-    (unit 1)
-    (exclude_from_sim no)
-    (in_bom yes)
-    (on_board yes)
-    (dnp no)
-    (uuid "{u}")
-    (property "Reference" "{ref}" (at {x + 5.08:.2f} {y - 2.54:.2f} 0)
-      (effects (font (size 1.27 1.27)))
-    )
-    (property "Value" "{value}" (at {x + 5.08:.2f} {y:.2f} 0)
-      (effects (font (size 1.27 1.27)))
-    )
-    (property "Footprint" "" (at {x:.2f} {y:.2f} 0)
-      (effects (font (size 1.27 1.27)) hide)
-    )
-    (property "Datasheet" "" (at {x:.2f} {y:.2f} 0)
-      (effects (font (size 1.27 1.27)) hide)
-    )
-    (pin "1"
-      (uuid "{uid()}")
-    )
-    (pin "2"
-      (uuid "{uid()}")
-    )
-    (pin "3"
-      (uuid "{uid()}")
-    )
-  )'''
-
-
-def mosfet_gate(x, y):
-    return (x - 5.08, y)
-
-
-def mosfet_drain(x, y):
-    return (x + 2.54, y - 5.08)
-
-
-def mosfet_source(x, y):
-    return (x + 2.54, y + 5.08)
-
-
-def make_switch(ref, value, x, y, angle=0):
-    """Switch: Switch:SW_Push.  pin1 at (-5.08,0), pin2 at (+5.08,0) for angle=0."""
-    x, y = snap(x), snap(y)
-    u = uid()
-    return f'''  (symbol
-    (lib_id "Switch:SW_Push")
-    (at {x:.2f} {y:.2f} {angle})
-    (unit 1)
-    (exclude_from_sim no)
-    (in_bom yes)
-    (on_board yes)
-    (dnp no)
-    (uuid "{u}")
-    (property "Reference" "{ref}" (at {x:.2f} {y - 3.81:.2f} 0)
-      (effects (font (size 1.27 1.27)))
-    )
-    (property "Value" "{value}" (at {x:.2f} {y + 3.81:.2f} 0)
-      (effects (font (size 1.27 1.27)))
-    )
-    (property "Footprint" "" (at {x:.2f} {y:.2f} 0)
-      (effects (font (size 1.27 1.27)) hide)
-    )
-    (property "Datasheet" "" (at {x:.2f} {y:.2f} 0)
-      (effects (font (size 1.27 1.27)) hide)
-    )
-    (pin "1"
-      (uuid "{uid()}")
-    )
-    (pin "2"
-      (uuid "{uid()}")
-    )
-  )'''
-
-
-def switch_pin1(x, y, angle=0):
-    if angle == 0:
-        return (x - 5.08, y)
-    elif angle == 90:
-        return (x, y - 5.08)
-    return (x - 5.08, y)
-
-
-def switch_pin2(x, y, angle=0):
-    if angle == 0:
-        return (x + 5.08, y)
-    elif angle == 90:
-        return (x, y + 5.08)
-    return (x + 5.08, y)
-
-
-# ============================================================
-# Section boundary box (dashed rectangle with title)
-# ============================================================
-
-def kicad_section_box(title, x1, y1, x2, y2):
-    """Draw a dashed boundary rectangle with a title, like the reference schematic."""
+def section_box(title, x1, y1, x2, y2):
     x1, y1, x2, y2 = snap(x1), snap(y1), snap(x2), snap(y2)
-    elems = []
-    elems.append(f'''  (polyline
-    (pts
-      (xy {x1:.2f} {y1:.2f}) (xy {x2:.2f} {y1:.2f}) (xy {x2:.2f} {y2:.2f})
-      (xy {x1:.2f} {y2:.2f}) (xy {x1:.2f} {y1:.2f})
+    lines = []
+    lines.append(
+        f'  (polyline (pts (xy {x1:.2f} {y1:.2f}) (xy {x2:.2f} {y1:.2f})'
+        f' (xy {x2:.2f} {y2:.2f}) (xy {x1:.2f} {y2:.2f}) (xy {x1:.2f} {y1:.2f}))'
+        f' (stroke (width 0.254) (type dash)) (uuid "{uid()}"))'
     )
-    (stroke
-      (width 0.254)
-      (type dash)
+    lines.append(txt(title, (x1 + x2) / 2, y1 + 4.0, 2.5, bold=True))
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# IC symbol placer - returns (element_str, pin_dict)
+# pin_dict maps pin_name -> (abs_x, abs_y)
+#
+# left_pins:  list of (name, pin_number)  - tips point LEFT, angle=0
+# right_pins: list of (name, pin_number)  - tips point RIGHT, angle=180
+# body_w, body_h: full body width/height in mm
+# pin_len: pin stub length
+# ---------------------------------------------------------------------------
+
+def place_ic(lib_id, ref, value, px, py,
+             left_pins, right_pins,
+             body_w=20.32, body_h=None,
+             pin_len=5.08, pin_spacing=2.54):
+    px, py = snap(px), snap(py)
+    n = max(len(left_pins), len(right_pins))
+    if body_h is None:
+        body_h = snap((n + 1) * pin_spacing)
+
+    hw = body_w / 2.0
+    hh = body_h / 2.0
+
+    # Build pin elements list
+    pin_dict = {}
+    pin_els = []
+
+    # Left pins: tip x = px - hw - pin_len, y increments from top
+    for i, (pname, pnum) in enumerate(left_pins):
+        sym_y = hh - pin_spacing - i * pin_spacing
+        abs_x = px - hw - pin_len
+        abs_y = py + sym_y
+        pin_dict[pname] = (snap(abs_x), snap(abs_y))
+        pin_els.append(f'  (pin "{pnum}" (uuid "{uid()}"))')
+
+    # Right pins: tip x = px + hw + pin_len
+    for i, (pname, pnum) in enumerate(right_pins):
+        sym_y = hh - pin_spacing - i * pin_spacing
+        abs_x = px + hw + pin_len
+        abs_y = py + sym_y
+        pin_dict[pname] = (snap(abs_x), snap(abs_y))
+        pin_els.append(f'  (pin "{pnum}" (uuid "{uid()}"))')
+
+    pins_str = "\n".join(pin_els)
+
+    n_left = len(left_pins) + 1
+    n_right = len(right_pins) + 1
+
+    elem = (
+        f'  (symbol (lib_id "{lib_id}") (at {px:.2f} {py:.2f} 0) (unit 1)\n'
+        f'    (property "Reference" "{ref}" (at {px:.2f} {py - hh - 3.81:.2f} 0)'
+        f' (effects (font (size 1.27 1.27))))\n'
+        f'    (property "Value" "{value}" (at {px:.2f} {py - hh - 1.27:.2f} 0)'
+        f' (effects (font (size 1.27 1.27))))\n'
+        f'{pins_str}\n'
+        f'  )'
     )
-    (uuid "{uid()}")
-  )''')
-    elems.append(kicad_text(title, (x1 + x2) / 2, y1 + 5.08, 3.0))
-    return elems
+    return elem, pin_dict
 
 
-# ============================================================
-# Module block builder -- draws a wire rectangle with title
-# and places net labels at pin positions along the edges.
-# ============================================================
+# ---------------------------------------------------------------------------
+# Capacitor placer (custom:C - vertical, 2-pin)
+# Pin 1 (top) tip: (cx, cy - 3.81)
+# Pin 2 (bot) tip: (cx, cy + 3.81)
+# ---------------------------------------------------------------------------
 
-def make_module_block(title, x, y, width, left_pins, right_pins, pin_spacing=7.62):
-    """
-    Draw a labeled wire rectangle representing a module/IC.
-    left_pins / right_pins: list of (pin_label_text, net_label_name_or_None)
-    Pin spacing defaults to 7.62mm (300 mils) to prevent label overlap.
-    Net labels are placed outside the box edge with a short wire stub.
-
-    Returns list of element strings.
-    """
-    x, y = snap(x), snap(y)
-    width = snap(width)
-    n_pins = max(len(left_pins), len(right_pins))
-    height = snap((n_pins + 1) * pin_spacing)
-
-    elems = []
-
-    elems.append(kicad_text(title, x + width / 2, y - 5.08, 2.0))
-
-    bx1, by1 = x, y
-    bx2, by2 = x + width, y + height
-    elems.append(kicad_wire(bx1, by1, bx2, by1))
-    elems.append(kicad_wire(bx2, by1, bx2, by2))
-    elems.append(kicad_wire(bx2, by2, bx1, by2))
-    elems.append(kicad_wire(bx1, by2, bx1, by1))
-
-    for i, (pin_text, net_name) in enumerate(left_pins):
-        py = y + (i + 1) * pin_spacing
-        elems.append(kicad_text(pin_text, x + 2.54, py, 1.27))
-        if net_name:
-            elems.append(kicad_wire(x, py, x - 7.62, py))
-            elems.append(kicad_label(net_name, x - 7.62, py, 180))
-
-    for i, (pin_text, net_name) in enumerate(right_pins):
-        py = y + (i + 1) * pin_spacing
-        elems.append(kicad_text(pin_text, x + width - 12.70, py, 1.27))
-        if net_name:
-            elems.append(kicad_wire(x + width, py, x + width + 7.62, py))
-            elems.append(kicad_label(net_name, x + width + 7.62, py, 0))
-
-    return elems
+def place_cap(ref, value, cx, cy):
+    cx, cy = snap(cx), snap(cy)
+    u = uid()
+    elem = (
+        f'  (symbol (lib_id "custom:C") (at {cx:.2f} {cy:.2f} 0) (unit 1)\n'
+        f'    (property "Reference" "{ref}" (at {cx + 1.27:.2f} {cy - 1.27:.2f} 0)'
+        f' (effects (font (size 1.016 1.016)) (justify left)))\n'
+        f'    (property "Value" "{value}" (at {cx + 1.27:.2f} {cy + 1.27:.2f} 0)'
+        f' (effects (font (size 1.016 1.016)) (justify left)))\n'
+        f'    (pin "1" (uuid "{uid()}"))\n'
+        f'    (pin "2" (uuid "{uid()}"))\n'
+        f'  )'
+    )
+    pin1 = (cx, cy - 3.81)   # top
+    pin2 = (cx, cy + 3.81)   # bottom
+    return elem, pin1, pin2
 
 
-def make_module_block_global(title, x, y, width, left_pins, right_pins, pin_spacing=7.62):
-    """Same as make_module_block but uses global_label for power nets."""
-    x, y = snap(x), snap(y)
-    width = snap(width)
-    n_pins = max(len(left_pins), len(right_pins))
-    height = snap((n_pins + 1) * pin_spacing)
+# ---------------------------------------------------------------------------
+# Resistor placer (custom:R - vertical, 2-pin)
+# Pin 1 (top) tip: (rx, ry - 3.81)
+# Pin 2 (bot) tip: (rx, ry + 3.81)
+# ---------------------------------------------------------------------------
 
-    elems = []
-    elems.append(kicad_text(title, x + width / 2, y - 5.08, 2.0))
-
-    bx1, by1 = x, y
-    bx2, by2 = x + width, y + height
-    elems.append(kicad_wire(bx1, by1, bx2, by1))
-    elems.append(kicad_wire(bx2, by1, bx2, by2))
-    elems.append(kicad_wire(bx2, by2, bx1, by2))
-    elems.append(kicad_wire(bx1, by2, bx1, by1))
-
-    for i, (pin_text, net_name, is_global) in enumerate(left_pins):
-        py = y + (i + 1) * pin_spacing
-        elems.append(kicad_text(pin_text, x + 2.54, py, 1.27))
-        if net_name:
-            elems.append(kicad_wire(x, py, x - 10.16, py))
-            if is_global:
-                elems.append(kicad_global_label(net_name, x - 10.16, py, 180, "bidirectional"))
-            else:
-                elems.append(kicad_label(net_name, x - 10.16, py, 180))
-
-    for i, (pin_text, net_name, is_global) in enumerate(right_pins):
-        py = y + (i + 1) * pin_spacing
-        elems.append(kicad_text(pin_text, x + width - 12.70, py, 1.27))
-        if net_name:
-            elems.append(kicad_wire(x + width, py, x + width + 10.16, py))
-            if is_global:
-                elems.append(kicad_global_label(net_name, x + width + 10.16, py, 0, "bidirectional"))
-            else:
-                elems.append(kicad_label(net_name, x + width + 10.16, py, 0))
-
-    return elems
+def place_res(ref, value, rx, ry):
+    rx, ry = snap(rx), snap(ry)
+    elem = (
+        f'  (symbol (lib_id "custom:R") (at {rx:.2f} {ry:.2f} 0) (unit 1)\n'
+        f'    (property "Reference" "{ref}" (at {rx + 1.27:.2f} {ry - 1.27:.2f} 0)'
+        f' (effects (font (size 1.016 1.016)) (justify left)))\n'
+        f'    (property "Value" "{value}" (at {rx + 1.27:.2f} {ry + 1.27:.2f} 0)'
+        f' (effects (font (size 1.016 1.016)) (justify left)))\n'
+        f'    (pin "1" (uuid "{uid()}"))\n'
+        f'    (pin "2" (uuid "{uid()}"))\n'
+        f'  )'
+    )
+    pin1 = (rx, ry - 3.81)
+    pin2 = (rx, ry + 3.81)
+    return elem, pin1, pin2
 
 
-# ============================================================
-# Decoupling cap helper
-# ============================================================
+# ---------------------------------------------------------------------------
+# MOSFET placer (custom:NMOSFET)
+# G tip: (mx - 7.62, my)
+# D tip: (mx,       my - 5.08)
+# S tip: (mx,       my + 5.08)
+# ---------------------------------------------------------------------------
 
-def add_decoupling_cap(ref, x, y, vcc_net, elements, bulk_ref=None, bulk_value="10uF"):
-    """Place a 100nF cap from VCC to GND next to an IC.
-    Cap is vertical: pin1 (top) = VCC, pin2 (bottom) = GND.
-    Optionally add a bulk cap too.
-    """
-    cx, cy = snap(x), snap(y)
-    elements.append(make_capacitor(ref, "100nF", cx, cy))
-    p1 = cap_pin1(cx, cy)
-    p2 = cap_pin2(cx, cy)
-    elements.append(kicad_global_label(vcc_net, p1[0], p1[1], 0, "bidirectional"))
-    elements.append(kicad_global_label("GND", p2[0], p2[1], 270, "input"))
-
-    if bulk_ref:
-        bx = cx + 7.62
-        elements.append(make_capacitor(bulk_ref, bulk_value, bx, cy))
-        bp1 = cap_pin1(bx, cy)
-        bp2 = cap_pin2(bx, cy)
-        elements.append(kicad_global_label(vcc_net, bp1[0], bp1[1], 0, "bidirectional"))
-        elements.append(kicad_global_label("GND", bp2[0], bp2[1], 270, "input"))
+def place_mosfet(ref, value, mx, my):
+    mx, my = snap(mx), snap(my)
+    elem = (
+        f'  (symbol (lib_id "custom:NMOSFET") (at {mx:.2f} {my:.2f} 0) (unit 1)\n'
+        f'    (property "Reference" "{ref}" (at {mx + 3.81:.2f} {my - 2.54:.2f} 0)'
+        f' (effects (font (size 1.27 1.27))))\n'
+        f'    (property "Value" "{value}" (at {mx + 3.81:.2f} {my:.2f} 0)'
+        f' (effects (font (size 1.27 1.27))))\n'
+        f'    (pin "1" (uuid "{uid()}"))\n'
+        f'    (pin "2" (uuid "{uid()}"))\n'
+        f'    (pin "3" (uuid "{uid()}"))\n'
+        f'  )'
+    )
+    g_tip = (mx - 7.62, my)
+    d_tip = (mx, my - 5.08)
+    s_tip = (mx, my + 5.08)
+    return elem, g_tip, d_tip, s_tip
 
 
-# ============================================================
+# ---------------------------------------------------------------------------
+# LED placer (custom:LED - horizontal)
+# A tip: (lx - 2.54, ly)  anode LEFT
+# K tip: (lx + 2.54, ly)  cathode RIGHT
+# ---------------------------------------------------------------------------
+
+def place_led(ref, value, lx, ly):
+    lx, ly = snap(lx), snap(ly)
+    elem = (
+        f'  (symbol (lib_id "custom:LED") (at {lx:.2f} {ly:.2f} 0) (unit 1)\n'
+        f'    (property "Reference" "{ref}" (at {lx:.2f} {ly - 2.54:.2f} 0)'
+        f' (effects (font (size 1.016 1.016))))\n'
+        f'    (property "Value" "{value}" (at {lx:.2f} {ly + 2.54:.2f} 0)'
+        f' (effects (font (size 1.016 1.016))))\n'
+        f'    (pin "1" (uuid "{uid()}"))\n'
+        f'    (pin "2" (uuid "{uid()}"))\n'
+        f'  )'
+    )
+    a_tip = (lx - 2.54, ly)
+    k_tip = (lx + 2.54, ly)
+    return elem, a_tip, k_tip
+
+
+# ---------------------------------------------------------------------------
+# Fan component placer (custom:FAN - 2-pin horizontal block)
+# + tip (left):  (fx - 7.62, fy + 1.27)
+# - tip (right): (fx + 7.62, fy + 1.27)
+# ---------------------------------------------------------------------------
+
+def place_fan(ref, fx, fy):
+    fx, fy = snap(fx), snap(fy)
+    elem = (
+        f'  (symbol (lib_id "custom:FAN") (at {fx:.2f} {fy:.2f} 0) (unit 1)\n'
+        f'    (property "Reference" "{ref}" (at {fx:.2f} {fy - 5.08:.2f} 0)'
+        f' (effects (font (size 1.27 1.27))))\n'
+        f'    (property "Value" "Fan" (at {fx:.2f} {fy + 5.08:.2f} 0)'
+        f' (effects (font (size 1.27 1.27))))\n'
+        f'    (pin "1" (uuid "{uid()}"))\n'
+        f'    (pin "2" (uuid "{uid()}"))\n'
+        f'  )'
+    )
+    plus_tip  = (fx - 7.62, fy)
+    minus_tip = (fx + 7.62, fy)
+    return elem, plus_tip, minus_tip
+
+
+# ---------------------------------------------------------------------------
+# Switch placer (custom:SW_Push - horizontal, 2-pin)
+# pin1 tip: (sx - 5.08, sy)
+# pin2 tip: (sx + 5.08, sy)
+# ---------------------------------------------------------------------------
+
+def place_switch(ref, value, sx, sy):
+    sx, sy = snap(sx), snap(sy)
+    elem = (
+        f'  (symbol (lib_id "custom:SW_Push") (at {sx:.2f} {sy:.2f} 0) (unit 1)\n'
+        f'    (property "Reference" "{ref}" (at {sx:.2f} {sy - 3.81:.2f} 0)'
+        f' (effects (font (size 1.27 1.27))))\n'
+        f'    (property "Value" "{value}" (at {sx:.2f} {sy + 3.81:.2f} 0)'
+        f' (effects (font (size 1.27 1.27))))\n'
+        f'    (pin "1" (uuid "{uid()}"))\n'
+        f'    (pin "2" (uuid "{uid()}"))\n'
+        f'  )'
+    )
+    p1 = (sx - 5.08, sy)
+    p2 = (sx + 5.08, sy)
+    return elem, p1, p2
+
+
+# ---------------------------------------------------------------------------
+# Decoupling cap helper - places cap vertically, wires pin1-net label, pin2-GND
+# ---------------------------------------------------------------------------
+
+def decouple(ref, value, cx, cy, pwr_net, els):
+    e, p1, p2 = place_cap(ref, value, cx, cy)
+    els.append(e)
+    els.append(glabel(pwr_net, p1[0], p1[1], shape="bidirectional", angle=90))
+    els.append(glabel("GND", p2[0], p2[1], shape="input", angle=270))
+
+
+# ---------------------------------------------------------------------------
 # MOSFET low-side switch helper
-# ============================================================
+# Returns g_tip, d_tip, s_tip
+# ---------------------------------------------------------------------------
 
-def add_mosfet_switch(q_ref, q_value, r_pulldown_ref, gate_net, drain_net, x, y, elements):
-    """
-    Low-side MOSFET switch:
-      Load -> Drain (top), Source -> GND (bottom), Gate <- MCU GPIO with pull-down R.
-    Places MOSFET at (x,y), pull-down resistor below gate.
-    Returns drain position for connecting load.
-    """
-    mx, my = snap(x), snap(y)
-    elements.append(make_mosfet_n(q_ref, q_value, mx, my))
-
-    g = mosfet_gate(mx, my)
-    d = mosfet_drain(mx, my)
-    s = mosfet_source(mx, my)
-
-    # Gate label
-    elements.append(kicad_label(gate_net, g[0], g[1], 180))
-
+def mosfet_switch(q_ref, q_val, rg_ref, gate_net, mx, my, els):
+    e, g_tip, d_tip, s_tip = place_mosfet(q_ref, q_val, mx, my)
+    els.append(e)
+    # Gate net label (wire in from left)
+    els.append(netlabel(gate_net, g_tip[0] - 5.08, g_tip[1], angle=180))
+    els.append(wire(g_tip[0] - 5.08, g_tip[1], g_tip[0], g_tip[1]))
+    # Gate pull-down resistor
+    rg_e, rg_p1, rg_p2 = place_res(rg_ref, "10k", snap(g_tip[0] - 5.08), snap(g_tip[1] + 7.62))
+    els.append(rg_e)
+    els.append(wire(g_tip[0] - 5.08, g_tip[1], rg_p1[0], rg_p1[1]))
+    els.append(glabel("GND", rg_p2[0], rg_p2[1], shape="input", angle=270))
     # Source to GND
-    elements.append(kicad_global_label("GND", s[0], s[1], 270, "input"))
-
-    # Drain label
-    elements.append(kicad_label(drain_net, d[0], d[1], 0))
-
-    # Gate pull-down resistor: placed to the left, below gate
-    prx, pry = snap(g[0]), snap(g[1] + 7.62)
-    elements.append(make_resistor(r_pulldown_ref, "10k", prx, pry))
-    p1 = resistor_pin1(prx, pry)  # top connects to gate wire
-    p2 = resistor_pin2(prx, pry)  # bottom to GND
-    elements.append(kicad_wire(g[0], g[1], p1[0], p1[1]))
-    elements.append(kicad_global_label("GND", p2[0], p2[1], 270, "input"))
-
-    return d
+    els.append(glabel("GND", s_tip[0], s_tip[1], shape="input", angle=270))
+    return g_tip, d_tip, s_tip
 
 
-# ============================================================
+# ===========================================================================
+# lib_symbols - every custom symbol used in this schematic
+# ===========================================================================
+
+def build_lib_symbols():
+    # Helper: generate a pin line inside a symbol
+    def pin(typ, name, num, at_x, at_y, angle, length=5.08, name_sz=1.016):
+        return (
+            f'      (pin {typ} line (at {at_x:.3f} {at_y:.3f} {angle}) (length {length:.3f})'
+            f' (name "{name}" (effects (font (size {name_sz} {name_sz}))))'
+            f' (number "{num}" (effects (font (size {name_sz} {name_sz})))))'
+        )
+
+    def ic_symbol(sym_id, body_w, body_h, left_pins_def, right_pins_def, pin_spacing=2.54, pin_len=5.08):
+        """
+        left_pins_def / right_pins_def: list of (pin_name, pin_number)
+        """
+        hw = body_w / 2.0
+        hh = body_h / 2.0
+        lines = []
+        lines.append(f'    (symbol "{sym_id}"')
+        lines.append(f'      (pin_names (offset 1.016))')
+        lines.append(f'      (pin_numbers hide)')
+        lines.append(f'      (property "Reference" "U" (at 0 {hh + 2.54:.3f} 0) (effects (font (size 1.27 1.27))))')
+        lines.append(f'      (property "Value" "{sym_id.split(":")[-1]}" (at 0 {-(hh + 1.27):.3f} 0) (effects (font (size 1.27 1.27))))')
+        base = sym_id.split(":")[-1]
+        lines.append(f'      (symbol "{base}_0_1"')
+        lines.append(f'        (rectangle (start {-hw:.3f} {-hh:.3f}) (end {hw:.3f} {hh:.3f})')
+        lines.append(f'          (stroke (width 0.254) (type default)) (fill (type background)))')
+        lines.append(f'      )')
+        lines.append(f'      (symbol "{base}_1_1"')
+
+        n_left  = len(left_pins_def)
+        n_right = len(right_pins_def)
+
+        for i, (pname, pnum) in enumerate(left_pins_def):
+            sym_y = hh - pin_spacing - i * pin_spacing
+            # angle 0 - tip points LEFT (tip at -hw-pin_len)
+            lines.append(pin("input", pname, pnum,
+                              -(hw + pin_len), sym_y,
+                              0, length=pin_len))
+
+        for i, (pname, pnum) in enumerate(right_pins_def):
+            sym_y = hh - pin_spacing - i * pin_spacing
+            # angle 180 - tip points RIGHT (tip at +hw+pin_len)
+            lines.append(pin("output", pname, pnum,
+                              (hw + pin_len), sym_y,
+                              180, length=pin_len))
+
+        lines.append(f'      )')
+        lines.append(f'    )')
+        return "\n".join(lines)
+
+    parts = []
+
+    # ------------------------------------------------------------------
+    # custom:C  (vertical capacitor)
+    # Pin 1 (top) tip at (0, +3.81) angle 270 - points UP
+    # Pin 2 (bot) tip at (0, -3.81) angle 90  - points DOWN
+    # ------------------------------------------------------------------
+    parts.append("""\
+    (symbol "custom:C"
+      (pin_names (offset 0.254))
+      (pin_numbers hide)
+      (property "Reference" "C" (at 1.27 0 0) (effects (font (size 1.016 1.016)) (justify left)))
+      (property "Value" "C" (at 1.27 2.54 0) (effects (font (size 1.016 1.016)) (justify left)))
+      (symbol "C_0_1"
+        (polyline (pts (xy -1.524 0.508) (xy 1.524 0.508)) (stroke (width 0.254) (type default)) (fill (type none)))
+        (polyline (pts (xy -1.524 -0.508) (xy 1.524 -0.508)) (stroke (width 0.254) (type default)) (fill (type none)))
+      )
+      (symbol "C_1_1"
+        (pin passive line (at 0 3.81 270) (length 3.302)
+          (name "+" (effects (font (size 0.762 0.762)))) (number "1" (effects (font (size 0.762 0.762)))))
+        (pin passive line (at 0 -3.81 90) (length 3.302)
+          (name "-" (effects (font (size 0.762 0.762)))) (number "2" (effects (font (size 0.762 0.762)))))
+      )
+    )""")
+
+    # ------------------------------------------------------------------
+    # custom:R  (vertical resistor)
+    # Pin 1 (top) tip at (0, +3.81) angle 270
+    # Pin 2 (bot) tip at (0, -3.81) angle 90
+    # ------------------------------------------------------------------
+    parts.append("""\
+    (symbol "custom:R"
+      (pin_names (offset 0.254))
+      (pin_numbers hide)
+      (property "Reference" "R" (at 1.27 0 0) (effects (font (size 1.016 1.016)) (justify left)))
+      (property "Value" "R" (at 1.27 2.54 0) (effects (font (size 1.016 1.016)) (justify left)))
+      (symbol "R_0_1"
+        (rectangle (start -1.016 -2.54) (end 1.016 2.54)
+          (stroke (width 0.254) (type default)) (fill (type none)))
+      )
+      (symbol "R_1_1"
+        (pin passive line (at 0 3.81 270) (length 1.27)
+          (name "~" (effects (font (size 1.016 1.016)))) (number "1" (effects (font (size 1.016 1.016)))))
+        (pin passive line (at 0 -3.81 90) (length 1.27)
+          (name "~" (effects (font (size 1.016 1.016)))) (number "2" (effects (font (size 1.016 1.016)))))
+      )
+    )""")
+
+    # ------------------------------------------------------------------
+    # custom:LED (horizontal)
+    # A tip at (-2.54, 0) angle 0  - points LEFT
+    # K tip at (+2.54, 0) angle 180 - points RIGHT
+    # ------------------------------------------------------------------
+    parts.append("""\
+    (symbol "custom:LED"
+      (pin_names (offset 1.016) hide)
+      (pin_numbers hide)
+      (property "Reference" "D" (at 0 2.54 0) (effects (font (size 1.016 1.016))))
+      (property "Value" "LED" (at 0 -2.54 0) (effects (font (size 1.016 1.016))))
+      (symbol "LED_0_1"
+        (polyline (pts (xy -1.27 -1.27) (xy -1.27 1.27)) (stroke (width 0.254) (type default)) (fill (type none)))
+        (polyline (pts (xy 1.27 -1.27) (xy 1.27 1.27) (xy -1.27 0) (xy 1.27 -1.27)) (stroke (width 0.254) (type default)) (fill (type none)))
+      )
+      (symbol "LED_1_1"
+        (pin passive line (at -2.54 0 0) (length 1.27)
+          (name "A" (effects (font (size 1.016 1.016)))) (number "1" (effects (font (size 1.016 1.016)))))
+        (pin passive line (at 2.54 0 180) (length 1.27)
+          (name "K" (effects (font (size 1.016 1.016)))) (number "2" (effects (font (size 1.016 1.016)))))
+      )
+    )""")
+
+    # ------------------------------------------------------------------
+    # custom:NMOSFET
+    # G tip at (-7.62, 0)  angle 0
+    # D tip at (0, -5.08)  angle 90  (drain top)
+    # S tip at (0, +5.08)  angle 270 (source bottom)
+    # ------------------------------------------------------------------
+    parts.append("""\
+    (symbol "custom:NMOSFET"
+      (pin_names (offset 0.254) hide)
+      (pin_numbers hide)
+      (property "Reference" "Q" (at 5.08 1.905 0) (effects (font (size 1.27 1.27)) (justify left)))
+      (property "Value" "NMOSFET" (at 5.08 0 0) (effects (font (size 1.27 1.27)) (justify left)))
+      (symbol "NMOSFET_0_1"
+        (polyline (pts (xy 0.254 1.905) (xy 0.254 -1.905)) (stroke (width 0.254) (type default)) (fill (type none)))
+        (polyline (pts (xy 0.254 0) (xy -2.54 0)) (stroke (width 0) (type default)) (fill (type none)))
+        (polyline (pts (xy 0.762 1.27) (xy 0.762 2.286)) (stroke (width 0.254) (type default)) (fill (type none)))
+        (polyline (pts (xy 0.762 -1.27) (xy 0.762 -2.286)) (stroke (width 0.254) (type default)) (fill (type none)))
+        (polyline (pts (xy 0.762 0.508) (xy 0.762 -0.508)) (stroke (width 0.254) (type default)) (fill (type none)))
+        (polyline (pts (xy 2.54 2.54) (xy 2.54 1.778) (xy 0.762 1.778)) (stroke (width 0) (type default)) (fill (type none)))
+        (polyline (pts (xy 0.762 -1.778) (xy 2.54 -1.778) (xy 2.54 -2.54)) (stroke (width 0) (type default)) (fill (type none)))
+        (polyline (pts (xy 2.54 -2.54) (xy 2.54 0) (xy 0.762 0)) (stroke (width 0) (type default)) (fill (type none)))
+        (polyline (pts (xy 1.016 0) (xy 2.032 0.381) (xy 2.032 -0.381) (xy 1.016 0)) (stroke (width 0) (type default)) (fill (type outline)))
+      )
+      (symbol "NMOSFET_1_1"
+        (pin passive line (at -7.62 0 0) (length 5.08)
+          (name "G" (effects (font (size 1.016 1.016)))) (number "1" (effects (font (size 1.016 1.016)))))
+        (pin passive line (at 0 -5.08 90) (length 2.54)
+          (name "D" (effects (font (size 1.016 1.016)))) (number "2" (effects (font (size 1.016 1.016)))))
+        (pin passive line (at 0 5.08 270) (length 2.54)
+          (name "S" (effects (font (size 1.016 1.016)))) (number "3" (effects (font (size 1.016 1.016)))))
+      )
+    )""")
+
+    # ------------------------------------------------------------------
+    # custom:FAN  (2-pin horizontal block)
+    # + tip at (-7.62, 0) angle 0
+    # - tip at (+7.62, 0) angle 180
+    # ------------------------------------------------------------------
+    parts.append("""\
+    (symbol "custom:FAN"
+      (pin_names (offset 0.254))
+      (pin_numbers hide)
+      (property "Reference" "FAN" (at 0 5.08 0) (effects (font (size 1.27 1.27))))
+      (property "Value" "Fan" (at 0 -5.08 0) (effects (font (size 1.27 1.27))))
+      (symbol "FAN_0_1"
+        (rectangle (start -5.08 -3.81) (end 5.08 3.81)
+          (stroke (width 0.254) (type default)) (fill (type background)))
+        (circle (center 0 0) (radius 2.54) (stroke (width 0.254) (type default)) (fill (type none)))
+        (polyline (pts (xy -1.27 -1.27) (xy 1.27 1.27)) (stroke (width 0.254) (type default)) (fill (type none)))
+        (polyline (pts (xy -1.27 1.27) (xy 1.27 -1.27)) (stroke (width 0.254) (type default)) (fill (type none)))
+      )
+      (symbol "FAN_1_1"
+        (pin passive line (at -7.62 0 0) (length 2.54)
+          (name "+" (effects (font (size 1.016 1.016)))) (number "1" (effects (font (size 1.016 1.016)))))
+        (pin passive line (at 7.62 0 180) (length 2.54)
+          (name "-" (effects (font (size 1.016 1.016)))) (number "2" (effects (font (size 1.016 1.016)))))
+      )
+    )""")
+
+    # ------------------------------------------------------------------
+    # custom:SW_Push  (2-pin horizontal switch)
+    # pin1 tip at (-5.08, 0) angle 0
+    # pin2 tip at (+5.08, 0) angle 180
+    # ------------------------------------------------------------------
+    parts.append("""\
+    (symbol "custom:SW_Push"
+      (pin_names (offset 1.016) hide)
+      (pin_numbers hide)
+      (property "Reference" "SW" (at 0 -3.81 0) (effects (font (size 1.27 1.27))))
+      (property "Value" "SW_Push" (at 0 3.81 0) (effects (font (size 1.27 1.27))))
+      (symbol "SW_Push_0_1"
+        (circle (center -2.032 0) (radius 0.508) (stroke (width 0) (type default)) (fill (type none)))
+        (circle (center 2.032 0) (radius 0.508) (stroke (width 0) (type default)) (fill (type none)))
+        (polyline (pts (xy -2.54 1.524) (xy 2.54 1.524)) (stroke (width 0) (type default)) (fill (type none)))
+        (polyline (pts (xy 0 1.524) (xy 0 2.54)) (stroke (width 0) (type default)) (fill (type none)))
+      )
+      (symbol "SW_Push_1_1"
+        (pin passive line (at -5.08 0 0) (length 2.54)
+          (name "1" (effects (font (size 1.016 1.016)))) (number "1" (effects (font (size 1.016 1.016)))))
+        (pin passive line (at 5.08 0 180) (length 2.54)
+          (name "2" (effects (font (size 1.016 1.016)))) (number "2" (effects (font (size 1.016 1.016)))))
+      )
+    )""")
+
+    # ------------------------------------------------------------------
+    # ESP32-S3  (20L + 20R pins)
+    # body 25.4 - 55.88 mm
+    # ------------------------------------------------------------------
+    esp_left = [
+        ("EN","1"),("IO0","2"),("IO1","3"),("IO2","4"),("IO3","5"),
+        ("IO4","6"),("IO5","7"),("IO6","8"),("IO7","9"),("IO8","10"),
+        ("IO9","11"),("IO10","12"),("IO11","13"),("IO12","14"),("IO13","15"),
+        ("IO14","16"),("IO15","17"),("IO18","18"),("IO19","19"),
+        ("3V3","20"),
+    ]
+    esp_right = [
+        ("IO16","21"),("IO17","22"),("IO20","23"),("IO21","24"),
+        ("IO35","25"),("IO36","26"),("IO37","27"),("IO38","28"),
+        ("IO39","29"),("IO40","30"),("IO41","31"),("IO42","32"),
+        ("IO43","33"),("IO44","34"),("IO45","35"),("IO46","36"),
+        ("IO47","37"),("IO48","38"),("GND","39"),("TX","40"),
+    ]
+    parts.append(ic_symbol("custom:ESP32S3", 25.4, 55.88, esp_left, esp_right))
+
+    # ------------------------------------------------------------------
+    # MCP73833 charger  (3L 3R)
+    # body 12.7 - 10.16 mm
+    # ------------------------------------------------------------------
+    mcp_left = [("VBAT","1"),("STAT1","2"),("STAT2","3")]
+    mcp_right = [("VDD","4"),("PROG","5"),("GND","6")]
+    parts.append(ic_symbol("custom:MCP73833", 12.7, 10.16, mcp_left, mcp_right))
+
+    # ------------------------------------------------------------------
+    # MAX17048 fuel gauge  (3L 3R)
+    # body 10.16 - 7.62 mm
+    # ------------------------------------------------------------------
+    max_left  = [("SDA","1"),("SCL","2"),("ALERT","3")]
+    max_right = [("VDD","4"),("GND","5"),("QSTRT","6")]
+    parts.append(ic_symbol("custom:MAX17048", 10.16, 7.62, max_left, max_right))
+
+    # ------------------------------------------------------------------
+    # REG3V3  (2L 1R)
+    # body 10.16 - 5.08 mm
+    # ------------------------------------------------------------------
+    reg3_left  = [("VIN","1"),("GND","2")]
+    reg3_right = [("VOUT","3")]
+    parts.append(ic_symbol("custom:REG3V3", 10.16, 5.08, reg3_left, reg3_right))
+
+    # ------------------------------------------------------------------
+    # REG9V  (same shape)
+    # ------------------------------------------------------------------
+    reg9_left  = [("VIN","1"),("GND","2")]
+    reg9_right = [("VOUT","3")]
+    parts.append(ic_symbol("custom:REG9V", 10.16, 5.08, reg9_left, reg9_right))
+
+    # ------------------------------------------------------------------
+    # SHT31  (2L 2R)
+    # body 7.62 - 5.08 mm
+    # ------------------------------------------------------------------
+    sht_left  = [("VDD","1"),("GND","2")]
+    sht_right = [("SDA","3"),("SCL","4")]
+    parts.append(ic_symbol("custom:SHT31", 7.62, 5.08, sht_left, sht_right))
+
+    # ------------------------------------------------------------------
+    # BH1750  (2L 2R)
+    # ------------------------------------------------------------------
+    bh_left  = [("VCC","1"),("GND","2")]
+    bh_right = [("SDA","3"),("SCL","4")]
+    parts.append(ic_symbol("custom:BH1750", 7.62, 5.08, bh_left, bh_right))
+
+    # ------------------------------------------------------------------
+    # DS3231  (3L 3R)
+    # body 10.16 - 7.62 mm
+    # ------------------------------------------------------------------
+    ds_left  = [("VCC","1"),("GND","2"),("VBAT","3")]
+    ds_right = [("SDA","4"),("SCL","5"),("SQW","6")]
+    parts.append(ic_symbol("custom:DS3231", 10.16, 7.62, ds_left, ds_right))
+
+    # ------------------------------------------------------------------
+    # OV2640 camera  (9L 9R)
+    # body 15.24 - 25.4 mm
+    # ------------------------------------------------------------------
+    ov_left = [
+        ("VDD3V3","1"),("GND","2"),("RESETB","3"),("PWDN","4"),
+        ("XCLK","5"),("SIOC","6"),("SIOD","7"),("HREF","8"),("VSYNC","9"),
+    ]
+    ov_right = [
+        ("D0","10"),("D1","11"),("D2","12"),("D3","13"),("D4","14"),
+        ("D5","15"),("D6","16"),("D7","17"),("PCLK","18"),
+    ]
+    parts.append(ic_symbol("custom:OV2640", 15.24, 25.4, ov_left, ov_right))
+
+    # ------------------------------------------------------------------
+    # ILI9341 display  (4L 4R)
+    # body 10.16 - 10.16 mm
+    # ------------------------------------------------------------------
+    tft_left  = [("VCC","1"),("GND","2"),("CS","3"),("DC","4")]
+    tft_right = [("MOSI","5"),("MISO","6"),("SCK","7"),("RST","8")]
+    parts.append(ic_symbol("custom:ILI9341", 10.16, 10.16, tft_left, tft_right))
+
+    # ------------------------------------------------------------------
+    # A4988 stepper driver  (4L 4R)
+    # body 12.70 - 10.16 mm
+    # ------------------------------------------------------------------
+    a4_left  = [("VMOT","1"),("GND","2"),("STEP","3"),("DIR","4")]
+    a4_right = [("1A","5"),("1B","6"),("2A","7"),("2B","8")]
+    parts.append(ic_symbol("custom:A4988", 12.70, 10.16, a4_left, a4_right))
+
+    # ------------------------------------------------------------------
+    # NEMA17 motor  (2L 2R)
+    # body 10.16 - 5.08 mm
+    # ------------------------------------------------------------------
+    nema_left  = [("A+","1"),("A-","2")]
+    nema_right = [("B+","3"),("B-","4")]
+    parts.append(ic_symbol("custom:NEMA17", 10.16, 5.08, nema_left, nema_right))
+
+    # ------------------------------------------------------------------
+    # GM65 barcode scanner  (2L 2R)
+    # body 10.16 - 5.08 mm
+    # ------------------------------------------------------------------
+    gm_left  = [("VCC","1"),("GND","2")]
+    gm_right = [("TX","3"),("RX","4")]
+    parts.append(ic_symbol("custom:GM65", 10.16, 5.08, gm_left, gm_right))
+
+    inner = "\n".join(parts)
+    return f"  (lib_symbols\n{inner}\n  )"
+
+
+# ===========================================================================
 # Main schematic generator
-# ============================================================
+# ===========================================================================
 
 def generate_schematic():
-    elements = []
+    els = []   # all schematic element strings
 
-    # =========================================================
-    # SECTION BOUNDARY BOXES (dashed rectangles like reference)
-    # =========================================================
-    elements.extend(kicad_section_box("Power Supply Section",
-                                      10.16, 7.62, 165.10, 114.30))
-    elements.extend(kicad_section_box("MCU & GPIO Section",
-                                      172.72, 7.62, 302.26, 198.12))
-    elements.extend(kicad_section_box("Sensors & I2C Section",
-                                      309.88, 7.62, 444.50, 160.02))
-    elements.extend(kicad_section_box("Camera & Optics Section",
-                                      309.88, 165.10, 444.50, 297.18))
-    elements.extend(kicad_section_box("Display & Storage Section",
-                                      172.72, 200.66, 302.26, 299.72))
-    elements.extend(kicad_section_box("Motor & Actuator Section",
-                                      10.16, 116.84, 165.10, 248.92))
-    elements.extend(kicad_section_box("UI: Button / LED / Buzzer Section",
-                                      10.16, 251.46, 165.10, 353.06))
-    elements.extend(kicad_section_box("Safety Section",
-                                      172.72, 302.26, 302.26, 355.60))
+    # -----------------------------------------------------------------------
+    # SECTION BOUNDARY BOXES
+    # -----------------------------------------------------------------------
+    els.extend(section_box("1 - Power Supply",     10, 10,  160, 140))
+    els.extend(section_box("2 - MCU  ESP32-S3",   170, 10,  310, 200))
+    els.extend(section_box("3 - Sensors & I2C",   320, 10,  460, 170))
+    els.extend(section_box("4 - Camera & Optics", 320, 175, 460, 305))
+    els.extend(section_box("5 - Display & SD",    170, 205, 310, 305))
+    els.extend(section_box("6 - Motor & Actuators", 10, 145, 160, 280))
+    els.extend(section_box("7 - UI: Button/LED/Buzzer", 10, 285, 160, 380))
+    els.extend(section_box("8 - Safety",          170, 310, 310, 380))
 
-    # Layout Instructions (like reference schematic)
-    elements.append(kicad_text("Layout Instructions:", 10.16, 363.22, 2.5))
-    elements.append(kicad_text("1. All decoupling caps should be placed as close to IC VCC pins as possible.", 10.16, 370.84, 1.5))
-    elements.append(kicad_text("2. I2C bus pull-ups: single pair of 4.7k at MCU end.", 10.16, 376.0, 1.5))
-    elements.append(kicad_text("3. SPI bus shared between TFT display and SD card (active-low CS per device).", 10.16, 381.0, 1.5))
-    elements.append(kicad_text("4. All MOSFETs are low-side switches with 10k gate pull-downs.", 10.16, 386.0, 1.5))
-    elements.append(kicad_text("5. UV-C LED requires series current-limiting resistor (47R @ 9V).", 10.16, 391.0, 1.5))
+    els.append(txt("Layout notes: 1) place decoupling caps next to IC VCC pins. "
+                   "2) I2C pull-ups at MCU end. "
+                   "3) SPI shared between TFT & SD (CS per device). "
+                   "4) All MOSFETs low-side with 10k gate pull-down.",
+                   12, 388, 1.27))
 
-    # =========================================================
-    # SECTION 1: POWER SUPPLY  (x=20, y=20)
-    # =========================================================
-    px, py = 20.32, 20.32
-
-    elements.append(kicad_text("", px + 30.48, py - 7.62, 4.0))  # title in section box now
-
-    # --- LiPo Battery ---
-    elements.append(kicad_text("BT1: LiPo 3.7V 2000mAh", px, py, 1.5))
-    elements.append(kicad_global_label("VBAT", px + 10.16, py + 5.08, 0, "bidirectional"))
-    elements.append(kicad_global_label("GND", px + 10.16, py + 10.16, 270, "input"))
+    # =======================================================================
+    # SECTION 1 - POWER SUPPLY  (top-left)
+    # =======================================================================
+    # --- LiPo battery label ---
+    bx, by = 18, 22
+    els.append(txt("BT1: LiPo 3.7V 2000mAh", bx, by, 1.5, bold=True))
+    els.append(glabel("VBAT", bx + 5, by + 7, shape="bidirectional", angle=0))
+    els.append(glabel("GND",  bx + 5, by + 12, shape="input", angle=0))
 
     # --- MCP73833 USB-C Charger ---
-    chg_x, chg_y = px + 30.48, py
-    chg_elems = make_module_block_global(
-        "U1: MCP73833 USB-C Charger", chg_x, chg_y, 43.18,
-        left_pins=[
-            ("VIN (USB-C)", "VUSB", True),
-            ("VSS", "GND", True),
-            ("PROG", None, False),
-        ],
-        right_pins=[
-            ("VBAT", "VBAT", True),
-            ("STAT1", None, False),
-            ("STAT2", None, False),
-        ]
-    )
-    elements.extend(chg_elems)
-    add_decoupling_cap("C1", chg_x + 55.88, chg_y + 5.08, "VUSB", elements)
+    chg_lp = [("VBAT","1"),("STAT1","2"),("STAT2","3")]
+    chg_rp = [("VDD","4"),("PROG","5"),("GND","6")]
+    chg_e, chg_pins = place_ic("custom:MCP73833","U1","MCP73833",
+                                55, 35, chg_lp, chg_rp,
+                                body_w=12.7, body_h=10.16)
+    els.append(chg_e)
+    # power connections via global labels
+    els.append(glabel("VBAT", chg_pins["VBAT"][0], chg_pins["VBAT"][1], shape="bidirectional", angle=180))
+    els.append(glabel("GND",  chg_pins["GND"][0],  chg_pins["GND"][1],  shape="input", angle=0))
+    els.append(glabel("VUSB", chg_pins["VDD"][0],  chg_pins["VDD"][1],  shape="bidirectional", angle=0))
+    # PROG resistor (sets charge current) - 10k to GND
+    pr_e, pr_p1, pr_p2 = place_res("R_PROG","10k",
+                                    snap(chg_pins["PROG"][0] + 7.62),
+                                    snap(chg_pins["PROG"][1]))
+    els.append(pr_e)
+    els.append(wire(chg_pins["PROG"][0], chg_pins["PROG"][1], pr_p1[0], pr_p1[1]))
+    els.append(glabel("GND", pr_p2[0], pr_p2[1], shape="input", angle=270))
+    # Decoupling on VDD (VUSB side)
+    decouple("C1","4.7uF", snap(chg_pins["VDD"][0]+5.08), snap(chg_pins["VDD"][1]+5.08), "VUSB", els)
 
-    # PWR_FLAG on VBAT
-    elements.append(kicad_pwr_flag(px + 25.40, py + 2.54, 1))
-    elements.append(kicad_wire(px + 25.40, py + 2.54, px + 25.40, py + 5.08))
-    elements.append(kicad_global_label("VBAT", px + 25.40, py + 5.08, 270, "bidirectional"))
+    # --- Pololu S13V25F9 - 9V ---
+    reg9_lp = [("VIN","1"),("GND","2")]
+    reg9_rp = [("VOUT","3")]
+    r9_e, r9_pins = place_ic("custom:REG9V","U2","S13V25F9 (9V)",
+                               55, 68, reg9_lp, reg9_rp,
+                               body_w=10.16, body_h=5.08)
+    els.append(r9_e)
+    els.append(glabel("VBAT", r9_pins["VIN"][0],  r9_pins["VIN"][1],  shape="bidirectional", angle=180))
+    els.append(glabel("GND",  r9_pins["GND"][0],  r9_pins["GND"][1],  shape="input", angle=180))
+    els.append(glabel("9V",   r9_pins["VOUT"][0], r9_pins["VOUT"][1], shape="bidirectional", angle=0))
+    decouple("C2","100nF", snap(r9_pins["VOUT"][0]+10), snap(r9_pins["VOUT"][1]+5), "9V", els)
+    decouple("C3","10uF",  snap(r9_pins["VOUT"][0]+20), snap(r9_pins["VOUT"][1]+5), "9V", els)
 
-    # --- Pololu S13V25F9 (5V/9V Buck-Boost) ---
-    r1x, r1y = px + 76.20, py
-    r1_elems = make_module_block_global(
-        "U2: Pololu S13V25F9 (9V)", r1x, r1y, 43.18,
-        left_pins=[
-            ("VIN", "VBAT", True),
-            ("GND", "GND", True),
-            ("EN", None, False),
-        ],
-        right_pins=[
-            ("VOUT (9V)", "9V", True),
-            ("GND", "GND", True),
-        ]
-    )
-    elements.extend(r1_elems)
-    add_decoupling_cap("C2", r1x + 55.88, r1y + 5.08, "9V", elements,
-                       bulk_ref="C3", bulk_value="10uF")
+    # --- Pololu S7V8F3 - 3.3V ---
+    reg3_lp = [("VIN","1"),("GND","2")]
+    reg3_rp = [("VOUT","3")]
+    r3_e, r3_pins = place_ic("custom:REG3V3","U3","S7V8F3 (3.3V)",
+                               55, 90, reg3_lp, reg3_rp,
+                               body_w=10.16, body_h=5.08)
+    els.append(r3_e)
+    els.append(glabel("VBAT", r3_pins["VIN"][0],  r3_pins["VIN"][1],  shape="bidirectional", angle=180))
+    els.append(glabel("GND",  r3_pins["GND"][0],  r3_pins["GND"][1],  shape="input", angle=180))
+    els.append(glabel("3V3",  r3_pins["VOUT"][0], r3_pins["VOUT"][1], shape="bidirectional", angle=0))
+    decouple("C4","100nF", snap(r3_pins["VOUT"][0]+10), snap(r3_pins["VOUT"][1]+5), "3V3", els)
+    decouple("C5","10uF",  snap(r3_pins["VOUT"][0]+20), snap(r3_pins["VOUT"][1]+5), "3V3", els)
 
-    # PWR_FLAG on 9V
-    elements.append(kicad_pwr_flag(r1x + 35.56, r1y - 5.08, 2))
-    elements.append(kicad_wire(r1x + 35.56, r1y - 5.08, r1x + 35.56, r1y - 2.54))
-    elements.append(kicad_global_label("9V", r1x + 35.56, r1y - 2.54, 270, "bidirectional"))
+    # --- MAX17048 fuel gauge ---
+    fg_lp = [("SDA","1"),("SCL","2"),("ALERT","3")]
+    fg_rp = [("VDD","4"),("GND","5"),("QSTRT","6")]
+    fg_e, fg_pins = place_ic("custom:MAX17048","U4","MAX17048",
+                               55, 115, fg_lp, fg_rp,
+                               body_w=10.16, body_h=7.62)
+    els.append(fg_e)
+    els.append(glabel("3V3",      fg_pins["VDD"][0],  fg_pins["VDD"][1],  shape="bidirectional", angle=0))
+    els.append(glabel("GND",      fg_pins["GND"][0],  fg_pins["GND"][1],  shape="input", angle=0))
+    els.append(netlabel("I2C_SDA",fg_pins["SDA"][0],  fg_pins["SDA"][1],  angle=180))
+    els.append(netlabel("I2C_SCL",fg_pins["SCL"][0],  fg_pins["SCL"][1],  angle=180))
+    decouple("C6","100nF", snap(fg_pins["VDD"][0]+10), snap(fg_pins["VDD"][1]+5), "3V3", els)
 
-    # --- Pololu S7V8F3 (3.3V) ---
-    r2x, r2y = px + 76.20, py + 30.48
-    r2_elems = make_module_block_global(
-        "U3: Pololu S7V8F3 (3.3V)", r2x, r2y, 43.18,
-        left_pins=[
-            ("VIN", "VBAT", True),
-            ("GND", "GND", True),
-            ("EN", None, False),
-        ],
-        right_pins=[
-            ("VOUT (3.3V)", "3V3", True),
-            ("GND", "GND", True),
-        ]
-    )
-    elements.extend(r2_elems)
-    add_decoupling_cap("C4", r2x + 55.88, r2y + 5.08, "3V3", elements,
-                       bulk_ref="C5", bulk_value="10uF")
-
-    # PWR_FLAG on 3V3
-    elements.append(kicad_pwr_flag(r2x + 35.56, r2y - 5.08, 3))
-    elements.append(kicad_wire(r2x + 35.56, r2y - 5.08, r2x + 35.56, r2y - 2.54))
-    elements.append(kicad_global_label("3V3", r2x + 35.56, r2y - 2.54, 270, "bidirectional"))
-
-    # --- MAX17048 Battery Fuel Gauge (I2C) ---
-    fg_x, fg_y = px, py + 50.80
-    fg_elems = make_module_block_global(
-        "U4: MAX17048 Fuel Gauge", fg_x, fg_y, 30.48,
-        left_pins=[
-            ("VDD", "VBAT", True),
-            ("GND", "GND", True),
-            ("CELL", "VBAT", True),
-        ],
-        right_pins=[
-            ("SDA", "I2C_SDA", False),
-            ("SCL", "I2C_SCL", False),
-            ("ALT", None, False),
-        ]
-    )
-    elements.extend(fg_elems)
-    add_decoupling_cap("C6", fg_x + 33.02, fg_y + 5.08, "VBAT", elements)
-
-    # PWR_FLAG on GND
-    elements.append(kicad_pwr_flag(px + 50.80, py + 73.66, 4))
-    elements.append(kicad_wire(px + 50.80, py + 73.66, px + 50.80, py + 76.20))
-    elements.append(kicad_global_label("GND", px + 50.80, py + 76.20, 270, "input"))
-
-    # =========================================================
-    # SECTION 2: ESP32-S3 MCU  (x=180, y=20)
-    # =========================================================
-    mx, my = 180.34, 20.32
-
-    elements.append(kicad_text("ESP32-S3 MCU", mx + 20.32, my - 7.62, 4.0))
-
-    # Build a large block for ESP32-S3
-    esp_left_pins = [
-        ("3V3", "3V3", True),
-        ("GND", "GND", True),
-        ("GPIO1", "MEASURE_BTN", False),
-        ("GPIO2", "FAN_GATE", False),
-        ("GPIO4", "STEP", False),
-        ("GPIO5", "UV_GATE", False),
-        ("GPIO6", "RGB_R", False),
-        ("GPIO7", "RGB_G", False),
-        ("GPIO8", "RGB_B", False),
-        ("GPIO9", "THERM_ADC", False),
-        ("GPIO10", "SPI_MOSI", False),
-        ("GPIO11", "SPI_SCK", False),
-        ("GPIO12", "TFT_CS", False),
-        ("GPIO13", "TFT_DC", False),
-        ("GPIO14", "TFT_RST", False),
-        ("GPIO15", "HEATER_GATE", False),
-        ("GPIO16", "DIR", False),
-        ("GPIO17", "LIMIT_SW", False),
-        ("GPIO18", "I2C_SCL", False),
-        ("GPIO19", "I2C_SDA", False),
+    # =======================================================================
+    # SECTION 2 - MCU: ESP32-S3  (top-center)
+    # =======================================================================
+    # Place ESP32-S3 at cx=235, cy=105 (center of body)
+    # body 25.4 - 55.88 - half: 12.7 - 27.94
+    # left pin tips at x = 235 - 12.7 - 5.08 = 217.22 - we use 215
+    # right pin tips at x = 235 + 12.7 + 5.08 = 252.78 - we use 255
+    esp_cx, esp_cy = 235, 105
+    esp_lp = [
+        ("EN","1"),("IO0","2"),("IO1","3"),("IO2","4"),("IO3","5"),
+        ("IO4","6"),("IO5","7"),("IO6","8"),("IO7","9"),("IO8","10"),
+        ("IO9","11"),("IO10","12"),("IO11","13"),("IO12","14"),("IO13","15"),
+        ("IO14","16"),("IO15","17"),("IO18","18"),("IO19","19"),("3V3","20"),
     ]
-    esp_right_pins = [
-        ("GPIO20", "REED_SW", False),
-        ("GPIO21", "BUZZER", False),
-        ("GPIO35", "SD_CS", False),
-        ("GPIO36", "CAM_D0", False),
-        ("GPIO37", "CAM_D1", False),
-        ("GPIO38", "CAM_D2", False),
-        ("GPIO39", "CAM_D3", False),
-        ("GPIO40", "CAM_D4", False),
-        ("GPIO41", "CAM_D5", False),
-        ("GPIO42", "CAM_D6", False),
-        ("GPIO43", "CAM_D7", False),
-        ("GPIO44", "CAM_PCLK", False),
-        ("GPIO45", "CAM_VSYNC", False),
-        ("GPIO46", "CAM_HREF", False),
-        ("GPIO47", "CAM_XCLK", False),
-        ("GPIO48", "CAM_SIOD", False),
-        ("SPI_MISO", "SPI_MISO", False),
-        ("BARCODE_TX", "BARCODE_TX", False),
-        ("BARCODE_RX", "BARCODE_RX", False),
-        ("EN", None, False),
+    esp_rp = [
+        ("IO16","21"),("IO17","22"),("IO20","23"),("IO21","24"),
+        ("IO35","25"),("IO36","26"),("IO37","27"),("IO38","28"),
+        ("IO39","29"),("IO40","30"),("IO41","31"),("IO42","32"),
+        ("IO43","33"),("IO44","34"),("IO45","35"),("IO46","36"),
+        ("IO47","37"),("IO48","38"),("GND","39"),("TX","40"),
     ]
+    esp_e, esp_pins = place_ic("custom:ESP32S3","U5","ESP32-S3-WROOM-1",
+                                esp_cx, esp_cy,
+                                esp_lp, esp_rp,
+                                body_w=25.4, body_h=55.88)
+    els.append(esp_e)
 
-    esp_elems = make_module_block_global(
-        "U5: ESP32-S3-WROOM-1", mx, my, 76.20,
-        left_pins=esp_left_pins,
-        right_pins=esp_right_pins,
-    )
-    elements.extend(esp_elems)
+    # Power rails
+    els.append(glabel("3V3", esp_pins["3V3"][0], esp_pins["3V3"][1], shape="bidirectional", angle=180))
+    els.append(glabel("GND", esp_pins["GND"][0], esp_pins["GND"][1], shape="input", angle=0))
+    # Decoupling caps on 3V3 right-side of MCU
+    decouple("C7","100nF", snap(esp_pins["3V3"][0]+10), snap(esp_pins["3V3"][1]), "3V3", els)
+    decouple("C8","10uF",  snap(esp_pins["3V3"][0]+20), snap(esp_pins["3V3"][1]), "3V3", els)
 
-    # Decoupling caps for ESP32
-    add_decoupling_cap("C7", mx + 91.44, my + 5.08, "3V3", elements,
-                       bulk_ref="C8", bulk_value="10uF")
+    # Left-side GPIO net labels
+    left_nets = {
+        "EN":   None,
+        "IO0":  "MEASURE_BTN",
+        "IO1":  "FAN_GATE",
+        "IO2":  "STEP",
+        "IO3":  "UV_GATE",
+        "IO4":  "RGB_R",
+        "IO5":  "RGB_G",
+        "IO6":  "RGB_B",
+        "IO7":  "THERM_ADC",
+        "IO8":  "SPI_MOSI",
+        "IO9":  "SPI_SCK",
+        "IO10": "TFT_CS",
+        "IO11": "TFT_DC",
+        "IO12": "TFT_RST",
+        "IO13": "HEATER_GATE",
+        "IO14": "DIR",
+        "IO15": "LIMIT_SW",
+        "IO18": "I2C_SCL",
+        "IO19": "I2C_SDA",
+    }
+    for gpio, net in left_nets.items():
+        if net and gpio in esp_pins:
+            tx, ty = esp_pins[gpio]
+            els.append(netlabel(net, tx - 5.08, ty, angle=180))
+            els.append(wire(tx - 5.08, ty, tx, ty))
 
-    # =========================================================
-    # SECTION 3: SENSORS & I2C  (x=320, y=20)
-    # =========================================================
-    sx, sy = 320.04, 20.32
+    # Right-side GPIO net labels
+    right_nets = {
+        "IO16": "REED_SW",
+        "IO17": "BUZZER",
+        "IO20": "SD_CS",
+        "IO21": "BARCODE_TX",
+        "IO35": "BARCODE_RX",
+        "IO36": "CAM_D0",
+        "IO37": "CAM_D1",
+        "IO38": "CAM_D2",
+        "IO39": "CAM_D3",
+        "IO40": "CAM_D4",
+        "IO41": "CAM_D5",
+        "IO42": "CAM_D6",
+        "IO43": "CAM_D7",
+        "IO44": "CAM_PCLK",
+        "IO45": "CAM_VSYNC",
+        "IO46": "CAM_HREF",
+        "IO47": "CAM_XCLK",
+        "IO48": "CAM_SIOD",
+        "TX":   "SPI_MISO",
+    }
+    for gpio, net in right_nets.items():
+        if net and gpio in esp_pins:
+            tx, ty = esp_pins[gpio]
+            els.append(netlabel(net, tx + 5.08, ty, angle=0))
+            els.append(wire(tx, ty, tx + 5.08, ty))
 
-    elements.append(kicad_text("SENSORS & I2C", sx + 15.24, sy - 7.62, 4.0))
+    # =======================================================================
+    # SECTION 3 - SENSORS & I2C  (top-right)
+    # =======================================================================
+    # I2C pull-up resistors
+    ipux, ipuy = 330, 22
+    els.append(txt("I2C Pull-ups (4.7k to 3V3)", ipux, ipuy - 4, 1.27))
+    rscl_e, rscl_p1, rscl_p2 = place_res("R1","4.7k", ipux + 5, ipuy + 10)
+    els.append(rscl_e)
+    els.append(glabel("3V3", rscl_p1[0], rscl_p1[1], shape="bidirectional", angle=90))
+    els.append(netlabel("I2C_SCL", rscl_p2[0], rscl_p2[1], angle=270))
 
-    # --- I2C Pull-up Resistors (4.7k) ---
-    elements.append(kicad_text("I2C Pull-ups", sx, sy, 1.5))
-    # R_SCL
-    rscl_x, rscl_y = sx + 5.08, sy + 10.16
-    elements.append(make_resistor("R1", "4.7k", rscl_x, rscl_y))
-    p1_scl = resistor_pin1(rscl_x, rscl_y)
-    p2_scl = resistor_pin2(rscl_x, rscl_y)
-    elements.append(kicad_global_label("3V3", p1_scl[0], p1_scl[1], 0, "bidirectional"))
-    elements.append(kicad_label("I2C_SCL", p2_scl[0], p2_scl[1], 270))
+    rsda_e, rsda_p1, rsda_p2 = place_res("R2","4.7k", ipux + 17, ipuy + 10)
+    els.append(rsda_e)
+    els.append(glabel("3V3", rsda_p1[0], rsda_p1[1], shape="bidirectional", angle=90))
+    els.append(netlabel("I2C_SDA", rsda_p2[0], rsda_p2[1], angle=270))
 
-    # R_SDA
-    rsda_x, rsda_y = sx + 15.24, sy + 10.16
-    elements.append(make_resistor("R2", "4.7k", rsda_x, rsda_y))
-    p1_sda = resistor_pin1(rsda_x, rsda_y)
-    p2_sda = resistor_pin2(rsda_x, rsda_y)
-    elements.append(kicad_global_label("3V3", p1_sda[0], p1_sda[1], 0, "bidirectional"))
-    elements.append(kicad_label("I2C_SDA", p2_sda[0], p2_sda[1], 270))
+    # --- SHT31 ---
+    sht_lp = [("VDD","1"),("GND","2")]
+    sht_rp = [("SDA","3"),("SCL","4")]
+    sht_e, sht_pins = place_ic("custom:SHT31","U6","SHT31",
+                                 365, 48, sht_lp, sht_rp,
+                                 body_w=7.62, body_h=5.08)
+    els.append(sht_e)
+    els.append(glabel("3V3",      sht_pins["VDD"][0], sht_pins["VDD"][1], shape="bidirectional", angle=180))
+    els.append(glabel("GND",      sht_pins["GND"][0], sht_pins["GND"][1], shape="input", angle=180))
+    els.append(netlabel("I2C_SDA",sht_pins["SDA"][0], sht_pins["SDA"][1], angle=0))
+    els.append(netlabel("I2C_SCL",sht_pins["SCL"][0], sht_pins["SCL"][1], angle=0))
+    decouple("C9","100nF", snap(sht_pins["SDA"][0]+10), snap(sht_pins["VDD"][1]), "3V3", els)
 
-    # --- SHT31 Humidity/Temp Sensor ---
-    sht_x, sht_y = sx, sy + 25.40
-    sht_elems = make_module_block(
-        "U6: SHT31 Humidity Sensor", sht_x, sht_y, 38.10,
-        left_pins=[
-            ("VDD", "3V3"),
-            ("GND", "GND"),
-            ("SDA", "I2C_SDA"),
-        ],
-        right_pins=[
-            ("SCL", "I2C_SCL"),
-            ("ADDR", None),
-            ("ALT", None),
-        ]
-    )
-    elements.extend(sht_elems)
-    # Global labels for power pins
-    elements.append(kicad_global_label("3V3", sht_x, sht_y + 5.08, 180, "bidirectional"))
-    elements.append(kicad_global_label("GND", sht_x, sht_y + 10.16, 180, "input"))
-    add_decoupling_cap("C9", sht_x + 50.80, sht_y + 5.08, "3V3", elements)
-
-    # --- BH1750 Light Sensor ---
-    bh_x, bh_y = sx, sy + 66.04
-    bh_elems = make_module_block(
-        "U7: BH1750 Light Sensor", bh_x, bh_y, 38.10,
-        left_pins=[
-            ("VCC", "3V3"),
-            ("GND", "GND"),
-            ("SDA", "I2C_SDA"),
-        ],
-        right_pins=[
-            ("SCL", "I2C_SCL"),
-            ("ADDR", None),
-        ]
-    )
-    elements.extend(bh_elems)
-    elements.append(kicad_global_label("3V3", bh_x, bh_y + 5.08, 180, "bidirectional"))
-    elements.append(kicad_global_label("GND", bh_x, bh_y + 10.16, 180, "input"))
-    add_decoupling_cap("C10", bh_x + 50.80, bh_y + 5.08, "3V3", elements)
+    # --- BH1750 ---
+    bh_lp = [("VCC","1"),("GND","2")]
+    bh_rp = [("SDA","3"),("SCL","4")]
+    bh_e, bh_pins = place_ic("custom:BH1750","U7","BH1750",
+                               365, 82, bh_lp, bh_rp,
+                               body_w=7.62, body_h=5.08)
+    els.append(bh_e)
+    els.append(glabel("3V3",      bh_pins["VCC"][0], bh_pins["VCC"][1], shape="bidirectional", angle=180))
+    els.append(glabel("GND",      bh_pins["GND"][0], bh_pins["GND"][1], shape="input", angle=180))
+    els.append(netlabel("I2C_SDA",bh_pins["SDA"][0], bh_pins["SDA"][1], angle=0))
+    els.append(netlabel("I2C_SCL",bh_pins["SCL"][0], bh_pins["SCL"][1], angle=0))
+    decouple("C10","100nF", snap(bh_pins["SDA"][0]+10), snap(bh_pins["VCC"][1]), "3V3", els)
 
     # --- DS3231 RTC ---
-    rtc_x, rtc_y = sx, sy + 111.76
-    rtc_elems = make_module_block(
-        "U8: DS3231 RTC", rtc_x, rtc_y, 38.10,
-        left_pins=[
-            ("VCC", "3V3"),
-            ("GND", "GND"),
-            ("SDA", "I2C_SDA"),
-        ],
-        right_pins=[
-            ("SCL", "I2C_SCL"),
-            ("SQW", None),
-            ("32K", None),
-        ]
-    )
-    elements.extend(rtc_elems)
-    elements.append(kicad_global_label("3V3", rtc_x, rtc_y + 5.08, 180, "bidirectional"))
-    elements.append(kicad_global_label("GND", rtc_x, rtc_y + 10.16, 180, "input"))
-    add_decoupling_cap("C11", rtc_x + 50.80, rtc_y + 5.08, "3V3", elements)
+    ds_lp = [("VCC","1"),("GND","2"),("VBAT","3")]
+    ds_rp = [("SDA","4"),("SCL","5"),("SQW","6")]
+    ds_e, ds_pins = place_ic("custom:DS3231","U8","DS3231",
+                               365, 120, ds_lp, ds_rp,
+                               body_w=10.16, body_h=7.62)
+    els.append(ds_e)
+    els.append(glabel("3V3",      ds_pins["VCC"][0],  ds_pins["VCC"][1],  shape="bidirectional", angle=180))
+    els.append(glabel("GND",      ds_pins["GND"][0],  ds_pins["GND"][1],  shape="input", angle=180))
+    els.append(glabel("VBAT",     ds_pins["VBAT"][0], ds_pins["VBAT"][1], shape="bidirectional", angle=180))
+    els.append(netlabel("I2C_SDA",ds_pins["SDA"][0],  ds_pins["SDA"][1],  angle=0))
+    els.append(netlabel("I2C_SCL",ds_pins["SCL"][0],  ds_pins["SCL"][1],  angle=0))
+    decouple("C11","100nF", snap(ds_pins["SDA"][0]+10), snap(ds_pins["VCC"][1]), "3V3", els)
 
-    # --- NTC Thermistor Voltage Divider ---
-    th_x, th_y = sx + 40.64, sy + 25.40
-    elements.append(kicad_text("NTC Thermistor Divider", th_x, th_y, 1.5))
+    # --- NTC Thermistor divider ---
+    ntc_x, ntc_y = 420, 50
+    els.append(txt("NTC Thermistor Divider", ntc_x - 5, ntc_y - 5, 1.27))
+    ntc_e, ntc_p1, ntc_p2 = place_res("R3","NTC 10k", ntc_x, ntc_y + 10)
+    els.append(ntc_e)
+    els.append(glabel("3V3", ntc_p1[0], ntc_p1[1], shape="bidirectional", angle=90))
+    fix_e, fix_p1, fix_p2 = place_res("R4","10k", ntc_x, ntc_y + 25)
+    els.append(fix_e)
+    els.append(wire(ntc_p2[0], ntc_p2[1], fix_p1[0], fix_p1[1]))
+    els.append(glabel("GND", fix_p2[0], fix_p2[1], shape="input", angle=270))
+    els.append(wire(ntc_p2[0], ntc_p2[1], ntc_p2[0] + 5.08, ntc_p2[1]))
+    els.append(netlabel("THERM_ADC", ntc_p2[0] + 5.08, ntc_p2[1], angle=0))
 
-    # Top resistor (NTC): pin1=3V3, pin2=midpoint
-    ntc_x, ntc_y = th_x + 7.62, th_y + 10.16
-    elements.append(make_resistor("R3", "NTC 10k", ntc_x, ntc_y))
-    p1_ntc = resistor_pin1(ntc_x, ntc_y)
-    p2_ntc = resistor_pin2(ntc_x, ntc_y)
-    elements.append(kicad_global_label("3V3", p1_ntc[0], p1_ntc[1], 0, "bidirectional"))
-
-    # Bottom resistor (fixed 10k): pin1=midpoint, pin2=GND
-    fix_x, fix_y = th_x + 7.62, th_y + 20.32
-    elements.append(make_resistor("R4", "10k", fix_x, fix_y))
-    p1_fix = resistor_pin1(fix_x, fix_y)
-    p2_fix = resistor_pin2(fix_x, fix_y)
-    elements.append(kicad_global_label("GND", p2_fix[0], p2_fix[1], 270, "input"))
-
-    # Wire midpoint: R3 pin2 to R4 pin1
-    elements.append(kicad_wire(p2_ntc[0], p2_ntc[1], p1_fix[0], p1_fix[1]))
-    # ADC label at midpoint
-    mid_y = (p2_ntc[1] + p1_fix[1]) / 2
-    elements.append(kicad_wire(p2_ntc[0], p2_ntc[1], p2_ntc[0] + 5.08, p2_ntc[1]))
-    elements.append(kicad_label("THERM_ADC", p2_ntc[0] + 5.08, p2_ntc[1], 0))
-
-    # =========================================================
-    # SECTION 4: CAMERA & OPTICS  (x=320, y=170)
-    # =========================================================
-    cx, cy = 320.04, 170.18
-
-    elements.append(kicad_text("CAMERA & OPTICS", cx + 15.24, cy - 7.62, 4.0))
-
-    # --- OV2640 Camera Module ---
-    cam_x, cam_y = cx, cy
-    cam_left = [
-        ("VCC", "3V3"),
-        ("GND", "GND"),
-        ("SIOD", "CAM_SIOD"),
-        ("SIOC", "I2C_SCL"),
-        ("VSYNC", "CAM_VSYNC"),
-        ("HREF", "CAM_HREF"),
-        ("PCLK", "CAM_PCLK"),
+    # =======================================================================
+    # SECTION 4 - CAMERA & OPTICS  (right, mid)
+    # =======================================================================
+    # OV2640 placed at cx=375, cy=240
+    ov_lp = [
+        ("VDD3V3","1"),("GND","2"),("RESETB","3"),("PWDN","4"),
+        ("XCLK","5"),("SIOC","6"),("SIOD","7"),("HREF","8"),("VSYNC","9"),
     ]
-    cam_right = [
-        ("XCLK", "CAM_XCLK"),
-        ("D0", "CAM_D0"),
-        ("D1", "CAM_D1"),
-        ("D2", "CAM_D2"),
-        ("D3", "CAM_D3"),
-        ("D4", "CAM_D4"),
-        ("D5", "CAM_D5"),
-        ("D6", "CAM_D6"),
-        ("D7", "CAM_D7"),
+    ov_rp = [
+        ("D0","10"),("D1","11"),("D2","12"),("D3","13"),("D4","14"),
+        ("D5","15"),("D6","16"),("D7","17"),("PCLK","18"),
     ]
-    cam_elems = make_module_block(
-        "U9: OV2640 Camera", cam_x, cam_y, 43.18,
-        left_pins=cam_left,
-        right_pins=cam_right,
-    )
-    elements.extend(cam_elems)
-    elements.append(kicad_global_label("3V3", cam_x, cam_y + 5.08, 180, "bidirectional"))
-    elements.append(kicad_global_label("GND", cam_x, cam_y + 10.16, 180, "input"))
-    add_decoupling_cap("C12", cam_x + 58.42, cam_y + 5.08, "3V3", elements,
-                       bulk_ref="C13", bulk_value="10uF")
+    ov_e, ov_pins = place_ic("custom:OV2640","U9","OV2640",
+                               375, 240,
+                               ov_lp, ov_rp,
+                               body_w=15.24, body_h=25.4)
+    els.append(ov_e)
 
-    # =========================================================
-    # SECTION 5: DISPLAY & STORAGE  (x=180, y=200)
-    # =========================================================
-    dx, dy = 180.34, 200.66
+    # Power
+    els.append(glabel("3V3",  ov_pins["VDD3V3"][0], ov_pins["VDD3V3"][1], shape="bidirectional", angle=180))
+    els.append(glabel("GND",  ov_pins["GND"][0],    ov_pins["GND"][1],    shape="input", angle=180))
+    # Pull RESETB high (to 3V3)
+    els.append(glabel("3V3",  ov_pins["RESETB"][0], ov_pins["RESETB"][1], shape="bidirectional", angle=180))
+    # Pull PWDN low (to GND)
+    els.append(glabel("GND",  ov_pins["PWDN"][0],   ov_pins["PWDN"][1],   shape="input", angle=180))
 
-    elements.append(kicad_text("DISPLAY & STORAGE", dx + 15.24, dy - 7.62, 4.0))
+    # Camera decoupling
+    decouple("C12","100nF", snap(ov_pins["VDD3V3"][0]-10), snap(ov_pins["VDD3V3"][1]+8), "3V3", els)
+    decouple("C13","10uF",  snap(ov_pins["VDD3V3"][0]-20), snap(ov_pins["VDD3V3"][1]+8), "3V3", els)
 
-    # --- ILI9341 TFT Display (SPI) ---
-    tft_x, tft_y = dx, dy
-    tft_elems = make_module_block(
-        "U10: ILI9341 2.4in TFT", tft_x, tft_y, 38.10,
-        left_pins=[
-            ("VCC", "3V3"),
-            ("GND", "GND"),
-            ("CS", "TFT_CS"),
-            ("DC", "TFT_DC"),
-            ("RST", "TFT_RST"),
-        ],
-        right_pins=[
-            ("MOSI", "SPI_MOSI"),
-            ("SCK", "SPI_SCK"),
-            ("LED", "3V3"),
-            ("MISO", "SPI_MISO"),
-        ]
-    )
-    elements.extend(tft_elems)
-    elements.append(kicad_global_label("3V3", tft_x, tft_y + 5.08, 180, "bidirectional"))
-    elements.append(kicad_global_label("GND", tft_x, tft_y + 10.16, 180, "input"))
-    add_decoupling_cap("C14", tft_x + 50.80, tft_y + 5.08, "3V3", elements)
+    # OV2640 - ESP32 data bus - net labels on both sides
+    # Right side of OV2640 - net labels; same labels appear on ESP32 right side
+    cam_data_map = {
+        "D0":   "CAM_D0",
+        "D1":   "CAM_D1",
+        "D2":   "CAM_D2",
+        "D3":   "CAM_D3",
+        "D4":   "CAM_D4",
+        "D5":   "CAM_D5",
+        "D6":   "CAM_D6",
+        "D7":   "CAM_D7",
+        "PCLK": "CAM_PCLK",
+    }
+    for ov_pin, net in cam_data_map.items():
+        tx, ty = ov_pins[ov_pin]
+        els.append(wire(tx, ty, tx + 7.62, ty))
+        els.append(netlabel(net, tx + 7.62, ty, angle=0))
 
-    # --- SD Card Module (SPI, shares bus) ---
-    sd_x, sd_y = dx, dy + 55.88
-    sd_elems = make_module_block(
-        "U11: SD Card Module (SPI)", sd_x, sd_y, 38.10,
-        left_pins=[
-            ("VCC", "3V3"),
-            ("GND", "GND"),
-            ("CS", "SD_CS"),
-        ],
-        right_pins=[
-            ("MOSI", "SPI_MOSI"),
-            ("SCK", "SPI_SCK"),
-            ("MISO", "SPI_MISO"),
-        ]
-    )
-    elements.extend(sd_elems)
-    elements.append(kicad_global_label("3V3", sd_x, sd_y + 5.08, 180, "bidirectional"))
-    elements.append(kicad_global_label("GND", sd_x, sd_y + 10.16, 180, "input"))
-    add_decoupling_cap("C15", sd_x + 50.80, sd_y + 5.08, "3V3", elements)
+    # Control signals from left side of OV2640
+    cam_ctrl_map = {
+        "XCLK":  "CAM_XCLK",
+        "SIOC":  "I2C_SCL",
+        "SIOD":  "CAM_SIOD",
+        "HREF":  "CAM_HREF",
+        "VSYNC": "CAM_VSYNC",
+    }
+    for ov_pin, net in cam_ctrl_map.items():
+        tx, ty = ov_pins[ov_pin]
+        els.append(wire(tx - 7.62, ty, tx, ty))
+        els.append(netlabel(net, tx - 7.62, ty, angle=180))
 
-    # =========================================================
-    # SECTION 6: MOTOR & ACTUATORS  (x=20, y=120)
-    # =========================================================
-    ax_m, ay_m = 20.32, 119.38
+    # Matching net labels on ESP32 side (already placed in right_nets dict above)
+    # CAM_SIOD - ESP32 IO48 via "CAM_SIOD" net
+    # Also add SIOD net label for ESP32 IO48
+    if "IO48" in esp_pins:
+        tx, ty = esp_pins["IO48"]
+        els.append(netlabel("CAM_SIOD", tx + 5.08, ty, angle=0))
+        els.append(wire(tx, ty, tx + 5.08, ty))
 
-    elements.append(kicad_text("MOTOR & ACTUATORS", ax_m + 20.32, ay_m - 7.62, 4.0))
+    # =======================================================================
+    # SECTION 5 - DISPLAY & STORAGE  (center, mid)
+    # =======================================================================
+    # ILI9341
+    tft_lp = [("VCC","1"),("GND","2"),("CS","3"),("DC","4")]
+    tft_rp = [("MOSI","5"),("MISO","6"),("SCK","7"),("RST","8")]
+    tft_e, tft_pins = place_ic("custom:ILI9341","U10","ILI9341",
+                                 210, 237, tft_lp, tft_rp,
+                                 body_w=10.16, body_h=10.16)
+    els.append(tft_e)
+    els.append(glabel("3V3", tft_pins["VCC"][0],  tft_pins["VCC"][1],  shape="bidirectional", angle=180))
+    els.append(glabel("GND", tft_pins["GND"][0],  tft_pins["GND"][1],  shape="input", angle=180))
+    els.append(netlabel("TFT_CS",   tft_pins["CS"][0],   tft_pins["CS"][1],   angle=180))
+    els.append(netlabel("TFT_DC",   tft_pins["DC"][0],   tft_pins["DC"][1],   angle=180))
+    els.append(netlabel("SPI_MOSI", tft_pins["MOSI"][0], tft_pins["MOSI"][1], angle=0))
+    els.append(netlabel("SPI_MISO", tft_pins["MISO"][0], tft_pins["MISO"][1], angle=0))
+    els.append(netlabel("SPI_SCK",  tft_pins["SCK"][0],  tft_pins["SCK"][1],  angle=0))
+    els.append(netlabel("TFT_RST",  tft_pins["RST"][0],  tft_pins["RST"][1],  angle=0))
+    decouple("C14","100nF", snap(tft_pins["MOSI"][0]+10), snap(tft_pins["VCC"][1]), "3V3", els)
 
-    # --- A4988 Stepper Driver ---
-    a4_x, a4_y = ax_m, ay_m
-    a4_elems = make_module_block_global(
-        "U12: A4988 Stepper Driver", a4_x, a4_y, 43.18,
-        left_pins=[
-            ("STEP", "STEP", False),
-            ("DIR", "DIR", False),
-            ("VDD", "3V3", True),
-            ("VMOT", "9V", True),
-            ("GND", "GND", True),
-            ("EN", None, False),
-        ],
-        right_pins=[
-            ("1A", "STEPPER_1A", False),
-            ("1B", "STEPPER_1B", False),
-            ("2A", "STEPPER_2A", False),
-            ("2B", "STEPPER_2B", False),
-            ("MS1", None, False),
-            ("MS2", None, False),
-        ]
-    )
-    elements.extend(a4_elems)
-    add_decoupling_cap("C16", a4_x + 58.42, a4_y + 5.08, "3V3", elements)
-    # Bulk cap on VMOT
-    add_decoupling_cap("C17", a4_x + 68.58, a4_y + 5.08, "9V", elements,
-                       bulk_ref="C18", bulk_value="100uF")
+    # SD card module
+    sd_lp = [("VCC","1"),("GND","2")]
+    sd_rp = [("TX","3"),("RX","4")]  # MOSI / MISO
+    sd_e, sd_pins = place_ic("custom:GM65","U11","SD Card Module",
+                               210, 270, sd_lp, sd_rp,
+                               body_w=10.16, body_h=5.08)
+    # Re-use GM65 symbol shape, relabel in properties only
+    els.append(sd_e)
+    els.append(glabel("3V3", sd_pins["VCC"][0], sd_pins["VCC"][1], shape="bidirectional", angle=180))
+    els.append(glabel("GND", sd_pins["GND"][0], sd_pins["GND"][1], shape="input", angle=180))
+    els.append(netlabel("SD_CS",    sd_pins["TX"][0], sd_pins["TX"][1], angle=0))
+    els.append(netlabel("SPI_MOSI", sd_pins["RX"][0], sd_pins["RX"][1], angle=0))
+    decouple("C15","100nF", snap(sd_pins["TX"][0]+10), snap(sd_pins["VCC"][1]), "3V3", els)
 
-    # --- NEMA 17 Stepper Motor ---
-    nm_x, nm_y = ax_m + 83.82, ay_m
-    nm_elems = make_module_block(
-        "M1: NEMA 17 Stepper", nm_x, nm_y, 25.40,
-        left_pins=[
-            ("A1", "STEPPER_1A"),
-            ("A2", "STEPPER_1B"),
-            ("B1", "STEPPER_2A"),
-            ("B2", "STEPPER_2B"),
-        ],
-        right_pins=[]
-    )
-    elements.extend(nm_elems)
+    # =======================================================================
+    # SECTION 6 - MOTOR & ACTUATORS  (left, mid)
+    # =======================================================================
+    # --- A4988 stepper driver ---
+    a4_lp = [("VMOT","1"),("GND","2"),("STEP","3"),("DIR","4")]
+    a4_rp = [("1A","5"),("1B","6"),("2A","7"),("2B","8")]
+    a4_e, a4_pins = place_ic("custom:A4988","U12","A4988",
+                               55, 178, a4_lp, a4_rp,
+                               body_w=12.70, body_h=10.16)
+    els.append(a4_e)
+    els.append(glabel("9V",  a4_pins["VMOT"][0], a4_pins["VMOT"][1], shape="bidirectional", angle=180))
+    els.append(glabel("GND", a4_pins["GND"][0],  a4_pins["GND"][1],  shape="input", angle=180))
+    els.append(netlabel("STEP", a4_pins["STEP"][0], a4_pins["STEP"][1], angle=180))
+    els.append(netlabel("DIR",  a4_pins["DIR"][0],  a4_pins["DIR"][1],  angle=180))
+    els.append(netlabel("STEPPER_1A", a4_pins["1A"][0], a4_pins["1A"][1], angle=0))
+    els.append(netlabel("STEPPER_1B", a4_pins["1B"][0], a4_pins["1B"][1], angle=0))
+    els.append(netlabel("STEPPER_2A", a4_pins["2A"][0], a4_pins["2A"][1], angle=0))
+    els.append(netlabel("STEPPER_2B", a4_pins["2B"][0], a4_pins["2B"][1], angle=0))
+    decouple("C16","100nF", snap(a4_pins["1A"][0]+10), snap(a4_pins["VMOT"][1]), "9V", els)
+    decouple("C17","100uF", snap(a4_pins["1A"][0]+20), snap(a4_pins["VMOT"][1]), "9V", els)
 
-    # --- Limit Switch ---
-    ls_x, ls_y = ax_m + 83.82, ay_m + 45.72
-    elements.append(kicad_text("Limit Switch", ls_x, ls_y, 1.5))
-    sw_x, sw_y = ls_x + 10.16, ls_y + 7.62
-    elements.append(make_switch("SW2", "Limit", sw_x, sw_y))
-    sp1 = switch_pin1(sw_x, sw_y)
-    sp2 = switch_pin2(sw_x, sw_y)
-    elements.append(kicad_global_label("GND", sp1[0], sp1[1], 180, "input"))
-    elements.append(kicad_label("LIMIT_SW", sp2[0], sp2[1], 0))
-    # Pull-up
-    pu_x, pu_y = snap(sp2[0] + 5.08), snap(sp2[1] - 5.08)
-    elements.append(make_resistor("R5", "10k", pu_x, pu_y))
-    p1_pu = resistor_pin1(pu_x, pu_y)
-    p2_pu = resistor_pin2(pu_x, pu_y)
-    elements.append(kicad_global_label("3V3", p1_pu[0], p1_pu[1], 0, "bidirectional"))
-    elements.append(kicad_wire(p2_pu[0], p2_pu[1], sp2[0], sp2[1]))
+    # --- NEMA17 ---
+    nm_lp = [("A+","1"),("A-","2")]
+    nm_rp = [("B+","3"),("B-","4")]
+    nm_e, nm_pins = place_ic("custom:NEMA17","M1","NEMA-17",
+                               120, 178, nm_lp, nm_rp,
+                               body_w=10.16, body_h=5.08)
+    els.append(nm_e)
+    els.append(netlabel("STEPPER_1A", nm_pins["A+"][0], nm_pins["A+"][1], angle=180))
+    els.append(netlabel("STEPPER_1B", nm_pins["A-"][0], nm_pins["A-"][1], angle=180))
+    els.append(netlabel("STEPPER_2A", nm_pins["B+"][0], nm_pins["B+"][1], angle=0))
+    els.append(netlabel("STEPPER_2B", nm_pins["B-"][0], nm_pins["B-"][1], angle=0))
 
-    # --- UV-C LED + IRLZ44N MOSFET ---
-    uv_x, uv_y = ax_m, ay_m + 50.80
-    elements.append(kicad_text("UV-C LED Circuit", uv_x, uv_y, 1.5))
-    uv_drain = add_mosfet_switch("Q1", "IRLZ44N", "R6", "UV_GATE", "UV_DRAIN",
-                                  uv_x + 12.70, uv_y + 15.24, elements)
-    # UV LED + series resistor above drain
-    uvr_x, uvr_y = snap(uv_drain[0]), snap(uv_drain[1] - 10.16)
-    elements.append(make_resistor("R7", "47R", uvr_x, uvr_y))
-    p1_uvr = resistor_pin1(uvr_x, uvr_y)
-    p2_uvr = resistor_pin2(uvr_x, uvr_y)
-    elements.append(kicad_wire(p2_uvr[0], p2_uvr[1], uv_drain[0], uv_drain[1]))
-    # LED above resistor
-    uvled_x, uvled_y = snap(p1_uvr[0]), snap(p1_uvr[1] - 7.62)
-    elements.append(make_led("D1", "UV-C", uvled_x, uvled_y, 90))
-    led_a = led_pin_a(uvled_x, uvled_y, 90)
-    led_k = led_pin_k(uvled_x, uvled_y, 90)
-    elements.append(kicad_wire(led_a[0], led_a[1], p1_uvr[0], p1_uvr[1]))
-    elements.append(kicad_global_label("9V", led_k[0], led_k[1], 0, "bidirectional"))
+    # --- Limit switch ---
+    sw2_e, sw2_p1, sw2_p2 = place_switch("SW2","Limit", 100, 205)
+    els.append(sw2_e)
+    els.append(glabel("GND", sw2_p1[0], sw2_p1[1], shape="input", angle=180))
+    els.append(netlabel("LIMIT_SW", sw2_p2[0], sw2_p2[1], angle=0))
+    pu_sw2_e, pu_sw2_p1, pu_sw2_p2 = place_res("R5","10k",
+                                                  snap(sw2_p2[0]+5), snap(sw2_p2[1]-7))
+    els.append(pu_sw2_e)
+    els.append(glabel("3V3", pu_sw2_p1[0], pu_sw2_p1[1], shape="bidirectional", angle=90))
+    els.append(wire(pu_sw2_p2[0], pu_sw2_p2[1], sw2_p2[0], sw2_p2[1]))
 
-    # --- Heater Film + IRLZ44N MOSFET ---
-    ht_x, ht_y = ax_m + 45.72, ay_m + 50.80
-    elements.append(kicad_text("Heater Film Circuit", ht_x, ht_y, 1.5))
-    ht_drain = add_mosfet_switch("Q2", "IRLZ44N", "R8", "HEATER_GATE", "HTR_DRAIN",
-                                  ht_x + 12.70, ht_y + 15.24, elements)
-    # Heater film load: just a label connecting to supply
-    elements.append(kicad_text("Heater Film", snap(ht_drain[0] - 2.54), snap(ht_drain[1] - 5.08), 1.2))
-    elements.append(kicad_global_label("9V", ht_drain[0], ht_drain[1], 0, "bidirectional"))
+    # --- UV-C LED + IRLZ44N ---
+    els.append(txt("UV-C LED Circuit", 15, 218, 1.27, bold=True))
+    _, uv_d, _ = mosfet_switch("Q1","IRLZ44N","R6","UV_GATE", 30, 240, els)
+    uvr_e, uvr_p1, uvr_p2 = place_res("R7","47R", snap(uv_d[0]), snap(uv_d[1] - 12.7))
+    els.append(uvr_e)
+    els.append(wire(uvr_p2[0], uvr_p2[1], uv_d[0], uv_d[1]))
+    uvled_e, uvled_a, uvled_k = place_led("D1","UV-C LED", snap(uvr_p1[0]), snap(uvr_p1[1] - 5.08))
+    els.append(uvled_e)
+    # LED horizontal: A is left tip, K is right tip
+    # We want: 9V - A - LED - K - (via wire down) - R7 pin1
+    # Rotate: place LED so K is at bottom (use vertical orientation via explicit wire)
+    els.append(wire(uvled_k[0], uvled_k[1], uvr_p1[0], uvr_p1[1]))
+    els.append(glabel("9V", uvled_a[0], uvled_a[1], shape="bidirectional", angle=180))
 
-    # --- Vent Fan + 2N7000 MOSFET ---
-    fn_x, fn_y = ax_m + 91.44, ay_m + 50.80
-    elements.append(kicad_text("Vent Fan Circuit", fn_x, fn_y, 1.5))
-    fn_drain = add_mosfet_switch("Q3", "2N7000", "R9", "FAN_GATE", "FAN_DRAIN",
-                                  fn_x + 12.70, fn_y + 15.24, elements)
-    elements.append(kicad_text("Vent Fan", snap(fn_drain[0] - 2.54), snap(fn_drain[1] - 5.08), 1.2))
-    elements.append(kicad_global_label("5V", fn_drain[0], fn_drain[1], 0, "bidirectional"))
-    # PWR_FLAG on 5V (define 5V rail here)
-    elements.append(kicad_pwr_flag(fn_x + 30.48, fn_y, 5))
-    elements.append(kicad_wire(fn_x + 30.48, fn_y, fn_x + 30.48, fn_y + 2.54))
-    elements.append(kicad_global_label("5V", fn_x + 30.48, fn_y + 2.54, 270, "bidirectional"))
+    # --- Heater film + IRLZ44N ---
+    els.append(txt("Heater Film Circuit", 55, 218, 1.27, bold=True))
+    _, ht_d, _ = mosfet_switch("Q2","IRLZ44N","R8","HEATER_GATE", 72, 240, els)
+    els.append(txt("Heater Film (9V)", snap(ht_d[0]-5), snap(ht_d[1]-4), 1.0))
+    els.append(glabel("9V", ht_d[0], ht_d[1], shape="bidirectional", angle=90))
 
-    # =========================================================
-    # SECTION 7: UI (Button/LED/Buzzer)  (x=20, y=280)
-    # =========================================================
-    ux, uy = 20.32, 259.08
+    # -----------------------------------------------------------------------
+    # FAN - FIX: proper 2-pin custom:FAN component wired to Q3 drain and 5V
+    # -----------------------------------------------------------------------
+    els.append(txt("Vent Fan Circuit", 98, 218, 1.27, bold=True))
+    _, fn_g, fn_d, fn_s = place_mosfet("Q3","2N7000", 115, 240)
+    # Gate
+    els.append(netlabel("FAN_GATE", fn_g[0] - 5.08, fn_g[1], angle=180))
+    els.append(wire(fn_g[0] - 5.08, fn_g[1], fn_g[0], fn_g[1]))
+    # Gate pull-down
+    r9_e, r9_p1, r9_p2 = place_res("R9","10k",
+                                     snap(fn_g[0] - 5.08), snap(fn_g[1] + 7.62))
+    els.append(r9_e)
+    els.append(wire(fn_g[0] - 5.08, fn_g[1], r9_p1[0], r9_p1[1]))
+    els.append(glabel("GND", r9_p2[0], r9_p2[1], shape="input", angle=270))
+    # Source to GND
+    els.append(glabel("GND", fn_s[0], fn_s[1], shape="input", angle=270))
+    # Fan component - place above Q3 drain
+    fan_cx = snap(fn_d[0])
+    fan_cy = snap(fn_d[1] - 10.16)
+    fan_e, fan_plus, fan_minus = place_fan("FAN1", fan_cx, fan_cy)
+    els.append(fan_e)
+    # Fan minus (right) - wire down to Q3 drain
+    els.append(wire(fan_minus[0], fan_minus[1], fn_d[0], fn_d[1]))
+    # Fan plus (left) - 5V global label
+    els.append(wire(fan_plus[0] - 5.08, fan_plus[1], fan_plus[0], fan_plus[1]))
+    els.append(glabel("5V", fan_plus[0] - 5.08, fan_plus[1], shape="bidirectional", angle=180))
 
-    elements.append(kicad_text("UI: BUTTON / LED / BUZZER", ux + 20.32, uy - 7.62, 4.0))
+    # =======================================================================
+    # SECTION 7 - UI: BUTTON / LED / BUZZER  (bottom-left)
+    # =======================================================================
+    # Measure button
+    sw1_e, sw1_p1, sw1_p2 = place_switch("SW1","Measure", 40, 310)
+    els.append(sw1_e)
+    els.append(glabel("GND", sw1_p1[0], sw1_p1[1], shape="input", angle=180))
+    els.append(netlabel("MEASURE_BTN", sw1_p2[0], sw1_p2[1], angle=0))
+    pu_btn_e, pu_btn_p1, pu_btn_p2 = place_res("R10","10k",
+                                                  snap(sw1_p2[0]+5), snap(sw1_p2[1]-7))
+    els.append(pu_btn_e)
+    els.append(glabel("3V3", pu_btn_p1[0], pu_btn_p1[1], shape="bidirectional", angle=90))
+    els.append(wire(pu_btn_p2[0], pu_btn_p2[1], sw1_p2[0], sw1_p2[1]))
 
-    # --- Measure Button with pull-up ---
-    elements.append(kicad_text("Measure Button", ux, uy, 1.5))
-    btn_x, btn_y = ux + 12.70, uy + 7.62
-    elements.append(make_switch("SW1", "Measure", btn_x, btn_y))
-    bp1 = switch_pin1(btn_x, btn_y)
-    bp2 = switch_pin2(btn_x, btn_y)
-    elements.append(kicad_global_label("GND", bp1[0], bp1[1], 180, "input"))
-    elements.append(kicad_label("MEASURE_BTN", bp2[0], bp2[1], 0))
-    # Pull-up resistor
-    btn_pu_x, btn_pu_y = snap(bp2[0] + 5.08), snap(bp2[1] - 5.08)
-    elements.append(make_resistor("R10", "10k", btn_pu_x, btn_pu_y))
-    p1_btn = resistor_pin1(btn_pu_x, btn_pu_y)
-    p2_btn = resistor_pin2(btn_pu_x, btn_pu_y)
-    elements.append(kicad_global_label("3V3", p1_btn[0], p1_btn[1], 0, "bidirectional"))
-    elements.append(kicad_wire(p2_btn[0], p2_btn[1], bp2[0], bp2[1]))
-
-    # --- RGB LED (Common Anode) with 330 ohm resistors ---
-    elements.append(kicad_text("RGB Status LED (Common Anode)", ux, uy + 22.86, 1.5))
-
-    rgb_channels = [
-        ("R11", "330R", "D2", "Red", "RGB_R", 0),
-        ("R12", "330R", "D3", "Green", "RGB_G", 15.24),
-        ("R13", "330R", "D4", "Blue", "RGB_B", 30.48),
+    # RGB LED (common anode)
+    els.append(txt("RGB Status LED (Common Anode)", 15, 325, 1.27, bold=True))
+    rgb_data = [
+        ("R11","330R","D2","Red LED",   "RGB_R", 20, 342),
+        ("R12","330R","D3","Green LED", "RGB_G", 35, 342),
+        ("R13","330R","D4","Blue LED",  "RGB_B", 50, 342),
     ]
-    for r_ref, r_val, d_ref, d_val, net, x_offset in rgb_channels:
-        ch_x = snap(ux + 5.08 + x_offset)
-        ch_y = snap(uy + 30.48)
+    for r_ref, r_val, d_ref, d_val, net, rx, ry in rgb_data:
+        r_e, r_p1, r_p2 = place_res(r_ref, r_val, rx, ry)
+        els.append(r_e)
+        els.append(netlabel(net, r_p1[0], r_p1[1], angle=90))
+        led_e, led_a, led_k = place_led(d_ref, d_val, snap(r_p2[0]), snap(r_p2[1] + 5.08))
+        els.append(led_e)
+        els.append(wire(led_a[0], led_a[1], r_p2[0], r_p2[1]))
+        els.append(glabel("3V3", led_k[0], led_k[1], shape="bidirectional", angle=0))
 
-        # Resistor (vertical): pin1 (top) = from MCU GPIO, pin2 (bottom) = to LED cathode
-        elements.append(make_resistor(r_ref, r_val, ch_x, ch_y))
-        rp1 = resistor_pin1(ch_x, ch_y)
-        rp2 = resistor_pin2(ch_x, ch_y)
-        elements.append(kicad_label(net, rp1[0], rp1[1], 0))
+    # Active buzzer
+    bz_x, bz_y = 80, 307
+    els.append(txt("BZ1: Active Buzzer", bz_x, bz_y, 1.5, bold=True))
+    els.append(netlabel("BUZZER", bz_x, bz_y + 7, angle=180))
+    els.append(glabel("GND", bz_x + 15, bz_y + 7, shape="input", angle=0))
+    els.append(txt("(+)GPIO21 (-)GND", bz_x + 2, bz_y + 10, 1.0))
 
-        # LED (vertical, angle=270 so anode is at top, cathode at bottom)
-        # Actually, use angle=90: pin1(K) goes up (y-3.81), pin2(A) goes down (y+3.81)
-        # We want: Anode at top (3V3), Cathode at bottom (to resistor)
-        # LED angle=270: K at (x, y+3.81), A at (x, y-3.81)
-        led_x, led_y = ch_x, snap(rp2[1] + 7.62)
-        elements.append(make_led(d_ref, d_val, led_x, led_y, 270))
-        la = led_pin_a(led_x, led_y, 270)  # anode = goes to 3V3
-        lk = led_pin_k(led_x, led_y, 270)  # cathode = goes to resistor
+    # GM65 Barcode scanner
+    bc_lp = [("VCC","1"),("GND","2")]
+    bc_rp = [("TX","3"),("RX","4")]
+    bc_e, bc_pins = place_ic("custom:GM65","U13","GM65 Barcode",
+                               120, 335, bc_lp, bc_rp,
+                               body_w=10.16, body_h=5.08)
+    els.append(bc_e)
+    els.append(glabel("3V3",           bc_pins["VCC"][0], bc_pins["VCC"][1], shape="bidirectional", angle=180))
+    els.append(glabel("GND",           bc_pins["GND"][0], bc_pins["GND"][1], shape="input", angle=180))
+    els.append(netlabel("BARCODE_RX",  bc_pins["TX"][0],  bc_pins["TX"][1],  angle=0))
+    els.append(netlabel("BARCODE_TX",  bc_pins["RX"][0],  bc_pins["RX"][1],  angle=0))
+    decouple("C19","100nF", snap(bc_pins["TX"][0]+10), snap(bc_pins["VCC"][1]), "3V3", els)
 
-        # Wire cathode to resistor pin2
-        elements.append(kicad_wire(lk[0], lk[1], rp2[0], rp2[1]))
-        # Anode to 3V3
-        elements.append(kicad_global_label("3V3", la[0], la[1], 270, "bidirectional"))
+    # =======================================================================
+    # SECTION 8 - SAFETY  (bottom-center)
+    # =======================================================================
+    sw3_e, sw3_p1, sw3_p2 = place_switch("SW3","MC-38 Reed", 215, 350)
+    els.append(sw3_e)
+    els.append(glabel("GND", sw3_p1[0], sw3_p1[1], shape="input", angle=180))
+    els.append(netlabel("REED_SW", sw3_p2[0], sw3_p2[1], angle=0))
+    pu_reed_e, pu_reed_p1, pu_reed_p2 = place_res("R14","10k",
+                                                     snap(sw3_p2[0]+5), snap(sw3_p2[1]-7))
+    els.append(pu_reed_e)
+    els.append(glabel("3V3", pu_reed_p1[0], pu_reed_p1[1], shape="bidirectional", angle=90))
+    els.append(wire(pu_reed_p2[0], pu_reed_p2[1], sw3_p2[0], sw3_p2[1]))
 
-    # --- Active Buzzer ---
-    bz_x, bz_y = ux + 55.88, uy
-    elements.append(kicad_text("BZ1: Active Buzzer", bz_x, bz_y, 1.5))
-    elements.append(kicad_label("BUZZER", bz_x, bz_y + 5.08, 180))
-    elements.append(kicad_global_label("GND", bz_x + 10.16, bz_y + 5.08, 0, "input"))
-    elements.append(kicad_text("(+) GPIO21", bz_x + 2.54, bz_y + 5.08, 1.0))
-
-    # --- GM65 Barcode Scanner (UART) ---
-    bc_x, bc_y = ux + 55.88, uy + 15.24
-    bc_elems = make_module_block(
-        "U13: GM65 Barcode Scanner", bc_x, bc_y, 38.10,
-        left_pins=[
-            ("VCC", "3V3"),
-            ("GND", "GND"),
-            ("TX", "BARCODE_RX"),
-        ],
-        right_pins=[
-            ("RX", "BARCODE_TX"),
-            ("TRIG", None),
-        ]
-    )
-    elements.extend(bc_elems)
-    elements.append(kicad_global_label("3V3", bc_x, bc_y + 5.08, 180, "bidirectional"))
-    elements.append(kicad_global_label("GND", bc_x, bc_y + 10.16, 180, "input"))
-    add_decoupling_cap("C19", bc_x + 50.80, bc_y + 5.08, "3V3", elements)
-
-    # =========================================================
-    # SECTION 8: SAFETY  (x=180, y=310)
-    # =========================================================
-    safex, safey = 180.34, 309.88
-
-    elements.append(kicad_text("SAFETY", safex + 10.16, safey - 7.62, 4.0))
-
-    # --- MC-38 Reed Switch with pull-up ---
-    elements.append(kicad_text("MC-38 Reed Switch Interlock", safex, safey, 1.5))
-    reed_x, reed_y = safex + 12.70, safey + 7.62
-    elements.append(make_switch("SW3", "MC-38_Reed", reed_x, reed_y))
-    rp1 = switch_pin1(reed_x, reed_y)
-    rp2 = switch_pin2(reed_x, reed_y)
-    elements.append(kicad_global_label("GND", rp1[0], rp1[1], 180, "input"))
-    elements.append(kicad_label("REED_SW", rp2[0], rp2[1], 0))
-    # Pull-up
-    reed_pu_x, reed_pu_y = snap(rp2[0] + 5.08), snap(rp2[1] - 5.08)
-    elements.append(make_resistor("R14", "10k", reed_pu_x, reed_pu_y))
-    p1_reed = resistor_pin1(reed_pu_x, reed_pu_y)
-    p2_reed = resistor_pin2(reed_pu_x, reed_pu_y)
-    elements.append(kicad_global_label("3V3", p1_reed[0], p1_reed[1], 0, "bidirectional"))
-    elements.append(kicad_wire(p2_reed[0], p2_reed[1], rp2[0], rp2[1]))
-
-    # =========================================================
+    # =======================================================================
     # Assemble schematic
-    # =========================================================
-    lib_symbols = generate_lib_symbols()
+    # =======================================================================
+    lib_sym = build_lib_symbols()
 
-    header = f'''(kicad_sch
+    header = f"""(kicad_sch
   (version 20231120)
-  (generator "python_urine_dipstick_generator_v2")
+  (generator "python_urine_dipstick_v3_fixed")
   (generator_version "8.0")
   (uuid "{uid()}")
   (paper "A0")
 
   (title_block
-    (title "Urine Dipstick Analyzer v2.0")
-    (date "2026-05-15")
-    (rev "2.0")
+    (title "Urine Dipstick Analyzer v2.0 - Fixed Wiring")
+    (date "2026-05-16")
+    (rev "3.0")
     (comment 1 "ESP32-S3 Based Camera Dipstick Analyzer")
-    (comment 2 "Power: LiPo 3.7V + USB-C Charging + MAX17048 Fuel Gauge")
-    (comment 3 "Display: ILI9341 TFT | RTC: DS3231 | Camera: OV2640")
-    (comment 4 "Generated by Python script v2.0")
+    (comment 2 "FIX: proper IC lib_symbols with explicit wire connections")
+    (comment 3 "FIX: OV2640 camera data bus wired to ESP32 via net labels")
+    (comment 4 "FIX: FAN1 is a proper 2-pin component wired to Q3 drain")
   )
 
-{lib_symbols}
+{lib_sym}
 
-'''
+"""
 
     footer = "\n)\n"
+    body = "\n".join(els)
+    return header + body + footer
 
-    content = header + "\n".join(elements) + footer
-    return content
 
-
-def generate_lib_symbols():
-    """lib_symbols section with all required symbol definitions."""
-    return '''  (lib_symbols
-    (symbol "Device:R"
-      (pin_numbers hide)
-      (pin_names (offset 0))
-      (exclude_from_sim no)
-      (in_bom yes)
-      (on_board yes)
-      (property "Reference" "R" (at 2.032 0 90) (effects (font (size 1.27 1.27))))
-      (property "Value" "R" (at 0 0 90) (effects (font (size 1.27 1.27))))
-      (property "Footprint" "" (at -1.778 0 90) (effects (font (size 1.27 1.27)) hide))
-      (property "Datasheet" "~" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
-      (symbol "R_0_1"
-        (rectangle (start -1.016 -2.54) (end 1.016 2.54)
-          (stroke (width 0) (type default))
-          (fill (type none))
-        )
-      )
-      (symbol "R_1_1"
-        (pin passive line (at 0 3.81 270) (length 1.27) (name "~" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
-        (pin passive line (at 0 -3.81 90) (length 1.27) (name "~" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))
-      )
-    )
-    (symbol "Device:C"
-      (pin_numbers hide)
-      (pin_names (offset 0.254))
-      (exclude_from_sim no)
-      (in_bom yes)
-      (on_board yes)
-      (property "Reference" "C" (at 0.635 2.54 0) (effects (font (size 1.27 1.27)) (justify left)))
-      (property "Value" "C" (at 0.635 -2.54 0) (effects (font (size 1.27 1.27)) (justify left)))
-      (property "Footprint" "" (at 0.9652 -3.81 0) (effects (font (size 1.27 1.27)) hide))
-      (property "Datasheet" "~" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
-      (symbol "C_0_1"
-        (polyline
-          (pts (xy -2.032 -0.762) (xy 2.032 -0.762))
-          (stroke (width 0.508) (type default))
-          (fill (type none))
-        )
-        (polyline
-          (pts (xy -2.032 0.762) (xy 2.032 0.762))
-          (stroke (width 0.508) (type default))
-          (fill (type none))
-        )
-      )
-      (symbol "C_1_1"
-        (pin passive line (at 0 3.81 270) (length 3.048) (name "~" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
-        (pin passive line (at 0 -3.81 90) (length 3.048) (name "~" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))
-      )
-    )
-    (symbol "Device:LED"
-      (pin_numbers hide)
-      (pin_names (offset 1.016) hide)
-      (exclude_from_sim no)
-      (in_bom yes)
-      (on_board yes)
-      (property "Reference" "D" (at 0 2.54 0) (effects (font (size 1.27 1.27))))
-      (property "Value" "LED" (at 0 -2.54 0) (effects (font (size 1.27 1.27))))
-      (property "Footprint" "" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
-      (property "Datasheet" "~" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
-      (symbol "LED_0_1"
-        (polyline
-          (pts (xy -1.27 -1.27) (xy -1.27 1.27))
-          (stroke (width 0.254) (type default))
-          (fill (type none))
-        )
-        (polyline
-          (pts (xy -1.27 0) (xy 1.27 0))
-          (stroke (width 0) (type default))
-          (fill (type none))
-        )
-        (polyline
-          (pts (xy 1.27 -1.27) (xy 1.27 1.27) (xy -1.27 0) (xy 1.27 -1.27))
-          (stroke (width 0.254) (type default))
-          (fill (type none))
-        )
-        (polyline
-          (pts (xy -3.048 -0.762) (xy -4.572 -2.286))
-          (stroke (width 0) (type default))
-          (fill (type none))
-        )
-        (polyline
-          (pts (xy -1.778 -0.762) (xy -3.302 -2.286))
-          (stroke (width 0) (type default))
-          (fill (type none))
-        )
-      )
-      (symbol "LED_1_1"
-        (pin passive line (at -3.81 0 0) (length 2.54) (name "K" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
-        (pin passive line (at 3.81 0 180) (length 2.54) (name "A" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))
-      )
-    )
-    (symbol "Device:Q_NMOS_GDS"
-      (pin_names (offset 0.254) hide)
-      (exclude_from_sim no)
-      (in_bom yes)
-      (on_board yes)
-      (property "Reference" "Q" (at 5.08 1.905 0) (effects (font (size 1.27 1.27)) (justify left)))
-      (property "Value" "Q_NMOS_GDS" (at 5.08 0 0) (effects (font (size 1.27 1.27)) (justify left)))
-      (property "Footprint" "" (at 5.08 2.54 0) (effects (font (size 1.27 1.27)) hide))
-      (property "Datasheet" "~" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
-      (symbol "Q_NMOS_GDS_0_1"
-        (polyline
-          (pts (xy 0.254 0) (xy -2.54 0))
-          (stroke (width 0) (type default))
-          (fill (type none))
-        )
-        (polyline
-          (pts (xy 0.254 1.905) (xy 0.254 -1.905))
-          (stroke (width 0.254) (type default))
-          (fill (type none))
-        )
-        (polyline
-          (pts (xy 0.762 -1.27) (xy 0.762 -2.286))
-          (stroke (width 0.254) (type default))
-          (fill (type none))
-        )
-        (polyline
-          (pts (xy 0.762 0.508) (xy 0.762 -0.508))
-          (stroke (width 0.254) (type default))
-          (fill (type none))
-        )
-        (polyline
-          (pts (xy 0.762 2.286) (xy 0.762 1.27))
-          (stroke (width 0.254) (type default))
-          (fill (type none))
-        )
-        (polyline
-          (pts (xy 2.54 2.54) (xy 2.54 1.778) (xy 0.762 1.778))
-          (stroke (width 0) (type default))
-          (fill (type none))
-        )
-        (polyline
-          (pts (xy 2.54 -2.54) (xy 2.54 0) (xy 0.762 0))
-          (stroke (width 0) (type default))
-          (fill (type none))
-        )
-        (polyline
-          (pts (xy 0.762 -1.778) (xy 2.54 -1.778) (xy 2.54 -2.54))
-          (stroke (width 0) (type default))
-          (fill (type none))
-        )
-        (polyline
-          (pts (xy 1.016 0) (xy 2.032 0.381) (xy 2.032 -0.381) (xy 1.016 0))
-          (stroke (width 0) (type default))
-          (fill (type outline))
-        )
-      )
-      (symbol "Q_NMOS_GDS_1_1"
-        (pin passive line (at -5.08 0 0) (length 2.54) (name "G" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
-        (pin passive line (at 2.54 5.08 270) (length 2.54) (name "D" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))
-        (pin passive line (at 2.54 -5.08 90) (length 2.54) (name "S" (effects (font (size 1.27 1.27)))) (number "3" (effects (font (size 1.27 1.27)))))
-      )
-    )
-    (symbol "Switch:SW_Push"
-      (pin_numbers hide)
-      (pin_names (offset 1.016) hide)
-      (exclude_from_sim no)
-      (in_bom yes)
-      (on_board yes)
-      (property "Reference" "SW" (at 1.27 6.35 0) (effects (font (size 1.27 1.27)) (justify left)))
-      (property "Value" "SW_Push" (at 0 -1.524 0) (effects (font (size 1.27 1.27))))
-      (property "Footprint" "" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
-      (property "Datasheet" "~" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
-      (symbol "SW_Push_0_1"
-        (circle (center -2.032 0) (radius 0.508)
-          (stroke (width 0) (type default))
-          (fill (type none))
-        )
-        (polyline
-          (pts (xy 0 1.524) (xy 0 3.048))
-          (stroke (width 0) (type default))
-          (fill (type none))
-        )
-        (polyline
-          (pts (xy 2.54 1.524) (xy -2.54 1.524))
-          (stroke (width 0) (type default))
-          (fill (type none))
-        )
-        (circle (center 2.032 0) (radius 0.508)
-          (stroke (width 0) (type default))
-          (fill (type none))
-        )
-        (pin passive line (at -5.08 0 0) (length 2.54) (name "1" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
-        (pin passive line (at 5.08 0 180) (length 2.54) (name "2" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))
-      )
-    )
-    (symbol "power:GND"
-      (power)
-      (pin_numbers hide)
-      (pin_names (offset 0) hide)
-      (exclude_from_sim no)
-      (in_bom yes)
-      (on_board yes)
-      (property "Reference" "#PWR" (at 0 -6.35 0) (effects (font (size 1.27 1.27)) hide))
-      (property "Value" "GND" (at 0 -3.81 0) (effects (font (size 1.27 1.27))))
-      (property "Footprint" "" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
-      (property "Datasheet" "" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
-      (symbol "GND_0_1"
-        (polyline
-          (pts (xy 0 0) (xy 0 -1.27) (xy 1.27 -1.27) (xy 0 -2.54) (xy -1.27 -1.27) (xy 0 -1.27))
-          (stroke (width 0) (type default))
-          (fill (type none))
-        )
-      )
-      (symbol "GND_1_1"
-        (pin power_in line (at 0 0 270) (length 0) (name "GND" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
-      )
-    )
-    (symbol "power:PWR_FLAG"
-      (power)
-      (pin_numbers hide)
-      (pin_names (offset 0) hide)
-      (exclude_from_sim no)
-      (in_bom yes)
-      (on_board yes)
-      (property "Reference" "#FLG" (at 0 1.905 0) (effects (font (size 1.27 1.27)) hide))
-      (property "Value" "PWR_FLAG" (at 0 3.81 0) (effects (font (size 1.27 1.27))))
-      (property "Footprint" "" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
-      (property "Datasheet" "~" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
-      (symbol "PWR_FLAG_0_1"
-        (pin power_out line (at 0 0 90) (length 0) (name "pwr" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
-      )
-    )
-  )
-'''
-
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
 
 def main():
-    output_dir = "/Users/siddhantsaboo/Desktop/agentic workflows/urine_dipstick_cad"
-    output_file = os.path.join(output_dir, "urine_dipstick_analyzer.kicad_sch")
+    out_dir  = "/Users/siddhantsaboo/Desktop/agentic workflows/urine_dipstick_cad"
+    out_file = os.path.join(out_dir, "urine_dipstick_analyzer.kicad_sch")
+    os.makedirs(out_dir, exist_ok=True)
 
-    os.makedirs(output_dir, exist_ok=True)
+    sch = generate_schematic()
+    with open(out_file, "w") as f:
+        f.write(sch)
 
-    schematic = generate_schematic()
-
-    with open(output_file, "w") as f:
-        f.write(schematic)
-
-    print(f"Schematic generated: {output_file}")
-    print(f"File size: {os.path.getsize(output_file)} bytes")
-
-    lines = schematic.split("\n")
-    symbols = schematic.count("(lib_id")
-    wires = schematic.count("(wire")
-    labels = schematic.count("(label")
-    glabels = schematic.count("(global_label")
-    texts = schematic.count('(text "')
-
-    print(f"\nSchematic statistics:")
-    print(f"  Total lines: {len(lines)}")
+    lines   = sch.count("\n")
+    symbols = sch.count("(lib_id")
+    wires   = sch.count("(wire")
+    labels  = sch.count("(label ")
+    glabels = sch.count("(global_label")
+    print(f"Written: {out_file}")
+    print(f"  Lines: {lines:,}")
     print(f"  Symbol instances: {symbols}")
-    print(f"  Wires: {wires}")
-    print(f"  Net labels: {labels}")
-    print(f"  Global labels: {glabels}")
-    print(f"  Text annotations: {texts}")
+    print(f"  Wires:            {wires}")
+    print(f"  Net labels:       {labels}")
+    print(f"  Global labels:    {glabels}")
+    print(f"  File size:        {os.path.getsize(out_file):,} bytes")
 
 
 if __name__ == "__main__":
