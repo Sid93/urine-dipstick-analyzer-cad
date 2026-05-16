@@ -1,0 +1,42 @@
+Ref,Component,Value,MPN,Description,Footprint,Qty,Unit Cost (USD),Total (USD),Source,URL,Notes
+U3,MCU module,ESP32-WROOM-32E-N8,ESP32-WROOM-32E-N8,Wi-Fi/BT module with 8MB flash,Module:ESP32-WROOM-32,1,3.40,3.40,Mouser,https://www.mouser.com/c/?q=ESP32-WROOM-32E-N8,Use -N8 (8MB) for OTA headroom
+U4,Light sensor,BH1750FVI-TR,BH1750FVI-TR,16-bit I2C ambient light sensor,Sensor:VEML6030_BH1750_DIP-6,1,1.60,1.60,Digi-Key,https://www.digikey.com/en/products/detail/rohm-semiconductor/BH1750FVI-TR/1564094,ADDR=GND -> 0x23
+U2,LDO regulator,AMS1117-3.3,AMS1117-3.3,800mA fixed 3.3V LDO,Package_TO_SOT_SMD:SOT-223,1,0.18,0.18,LCSC,https://www.lcsc.com/product-detail/C6186.html,1.1V dropout @ 800mA; min 22uF Cout
+U1,USB ESD array,USBLC6-2SC6,USBLC6-2SC6,4-line low-cap TVS for USB,Package_TO_SOT_SMD:SOT-23-6,1,0.55,0.55,Mouser,https://www.mouser.com/ProductDetail/STMicroelectronics/USBLC6-2SC6,Place within 5mm of USB-C
+D1,TVS diode,SMAJ5.0CA,SMAJ5.0CA,5.0V bidirectional 400W TVS,Diode:SMA,1,0.30,0.30,Digi-Key,https://www.digikey.com/en/products/detail/littelfuse-inc/SMAJ5-0CA/1009908,VBUS clamp
+Q1,P-MOSFET,AO3401A,AO3401A,-30V -4A P-channel SOT-23,Package_TO_SOT_SMD:SOT-23,1,0.18,0.18,LCSC,https://www.lcsc.com/product-detail/C15127.html,Reverse polarity protection
+D2,Green LED,LED_GRN,LTST-C190KGKT,0603 SMD green power indicator,LED_SMD:LED_0603_1608Metric,1,0.10,0.10,Lite-On,https://www.mouser.com/ProductDetail/Lite-On/LTST-C190KGKT,Vf 2.0V @ 5mA
+F1,Polyfuse,MF-MSMF050-2,MF-MSMF050-2,0.5A hold/1A trip PTC resettable,Fuse:Fuse_1812_4532Metric,1,0.45,0.45,Bourns/Littelfuse,https://www.mouser.com/ProductDetail/Littelfuse/MF-MSMF050-2,VBUS overcurrent
+FB1,Ferrite bead,BLM18PG121SN1D,BLM18PG121SN1D,120 Ohm @ 100MHz 2A 0603,Inductor_SMD:L_0603_1608Metric,1,0.12,0.12,Murata,https://www.murata.com/en-global/products/productdetail?partno=BLM18PG121SN1D,Isolates ESP32 3V3 supply
+J1,USB-C receptacle,TYPE-C-31-M-12,TYPE-C-31-M-12,USB Type-C 16-pin SMD,Connector:USB_C_Receptacle,1,0.85,0.85,LCSC,https://www.lcsc.com/product-detail/C165948.html,2.0 speeds OK
+J2,Pin header,6-pin 2.54mm,PRPC006SAAN-RC,6-pin 0.1in straight header,Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical,1,0.25,0.25,Sullins,https://www.mouser.com/ProductDetail/Sullins-Connector-Solutions/PRPC006SAAN-RC,UART programming
+SW1,Tact switch,RESET,EVQ-Q2K03W,6x6 surface-mount tactile button,Button_Switch_SMD:SW_SPST_EVQP0,1,0.32,0.32,Panasonic,https://www.mouser.com/ProductDetail/Panasonic/EVQ-Q2K03W,EN to GND
+SW2,Tact switch,BOOT,EVQ-Q2K03W,6x6 surface-mount tactile button,Button_Switch_SMD:SW_SPST_EVQP0,1,0.32,0.32,Panasonic,https://www.mouser.com/ProductDetail/Panasonic/EVQ-Q2K03W,IO0 to GND
+R1,Resistor,5.1k,RC0603FR-075K1L,USB-C CC1 pull-down,Resistor_SMD:R_0603_1608Metric,1,0.01,0.01,Yageo,https://www.yageo.com,1% 0603
+R2,Resistor,5.1k,RC0603FR-075K1L,USB-C CC2 pull-down,Resistor_SMD:R_0603_1608Metric,1,0.01,0.01,Yageo,https://www.yageo.com,1% 0603
+R3,Resistor,10k,RC0603FR-0710KL,Q1 gate pull-up,Resistor_SMD:R_0603_1608Metric,1,0.01,0.01,Yageo,https://www.yageo.com,1% 0603
+R4,Resistor,1k,RC0603FR-071KL,Power LED limit,Resistor_SMD:R_0603_1608Metric,1,0.01,0.01,Yageo,https://www.yageo.com,~3.3mA @ 3.3V
+R5,Resistor,10k,RC0603FR-0710KL,EN pull-up,Resistor_SMD:R_0603_1608Metric,1,0.01,0.01,Yageo,https://www.yageo.com,Sets reset tau
+R6,Resistor,10k,RC0603FR-0710KL,IO0 boot pull-up,Resistor_SMD:R_0603_1608Metric,1,0.01,0.01,Yageo,https://www.yageo.com,Normal boot
+R7,Resistor,10k,RC0603FR-0710KL,IO2 boot pull-down,Resistor_SMD:R_0603_1608Metric,1,0.01,0.01,Yageo,https://www.yageo.com,Default low for boot
+R8,Resistor,10k,RC0603FR-0710KL,IO15 boot pull-up,Resistor_SMD:R_0603_1608Metric,1,0.01,0.01,Yageo,https://www.yageo.com,Silent boot
+R9,Resistor,4.7k,RC0603FR-074K7L,I2C SDA pull-up,Resistor_SMD:R_0603_1608Metric,1,0.01,0.01,Yageo,https://www.yageo.com,400kHz capable
+R10,Resistor,4.7k,RC0603FR-074K7L,I2C SCL pull-up,Resistor_SMD:R_0603_1608Metric,1,0.01,0.01,Yageo,https://www.yageo.com,400kHz capable
+R11,Resistor,100R DNP,RC0603FR-07100RL,SDA EMI series R (DNP),Resistor_SMD:R_0603_1608Metric,1,0.00,0.00,Yageo,https://www.yageo.com,Do not populate by default
+R12,Resistor,100R DNP,RC0603FR-07100RL,SCL EMI series R (DNP),Resistor_SMD:R_0603_1608Metric,1,0.00,0.00,Yageo,https://www.yageo.com,Do not populate by default
+C1,Ceramic cap,4.7uF,CL10A475KP8NNNC,VBUS_PROT bulk,Capacitor_SMD:C_0603_1608Metric,1,0.05,0.05,Samsung,https://www.samsungsem.com,X5R 10V
+C2,Ceramic cap,10uF,CL21A106KAYNNNE,LDO input bulk,Capacitor_SMD:C_0805_2012Metric,1,0.08,0.08,Samsung,https://www.samsungsem.com,X5R 10V 0805
+C3,Ceramic cap,100nF,CC0603KRX7R9BB104,LDO input ceramic,Capacitor_SMD:C_0603_1608Metric,1,0.01,0.01,Yageo,https://www.yageo.com,X7R 50V
+C4,Ceramic cap,22uF,GRM21BR60J226ME39L,LDO output bulk,Capacitor_SMD:C_0805_2012Metric,1,0.12,0.12,Murata,https://www.murata.com,Required for AMS1117 stability
+C5,Ceramic cap,100nF,CC0603KRX7R9BB104,LDO output ceramic,Capacitor_SMD:C_0603_1608Metric,1,0.01,0.01,Yageo,https://www.yageo.com,X7R 50V
+C6,Ceramic cap,1uF,CL10A105KO8NNNC,Clean rail bulk,Capacitor_SMD:C_0603_1608Metric,1,0.02,0.02,Samsung,https://www.samsungsem.com,X5R 10V
+C7,Ceramic cap,100nF,CC0603KRX7R9BB104,Clean rail bypass,Capacitor_SMD:C_0603_1608Metric,1,0.01,0.01,Yageo,https://www.yageo.com,X7R 50V
+C8,Ceramic cap,10nF,CC0603KRX7R9BB103,High freq bypass,Capacitor_SMD:C_0603_1608Metric,1,0.01,0.01,Yageo,https://www.yageo.com,X7R 50V
+C9,Ceramic cap,100nF,CC0603KRX7R9BB104,ESP32 VDD33 bypass,Capacitor_SMD:C_0603_1608Metric,1,0.01,0.01,Yageo,https://www.yageo.com,Within 2mm of pin 2
+C10,Ceramic cap,1uF,CL10A105KO8NNNC,ESP32 VDD33 bulk,Capacitor_SMD:C_0603_1608Metric,1,0.02,0.02,Samsung,https://www.samsungsem.com,
+C11,Ceramic cap,100nF,CC0603KRX7R9BB104,EN reset RC,Capacitor_SMD:C_0603_1608Metric,1,0.01,0.01,Yageo,https://www.yageo.com,tau = R5*C11 = 1ms
+C12,Ceramic cap,100nF,CC0603KRX7R9BB104,BH1750 VCC bypass,Capacitor_SMD:C_0603_1608Metric,1,0.01,0.01,Yageo,https://www.yageo.com,
+C13,Ceramic cap,1uF,CL10A105KO8NNNC,BH1750 VCC bulk,Capacitor_SMD:C_0603_1608Metric,1,0.02,0.02,Samsung,https://www.samsungsem.com,
+C14,Ceramic cap,10nF DNP,CC0603KRX7R9BB103,SDA EMI filter (DNP),Capacitor_SMD:C_0603_1608Metric,1,0.00,0.00,Yageo,https://www.yageo.com,Do not populate by default
+C15,Ceramic cap,10nF DNP,CC0603KRX7R9BB103,SCL EMI filter (DNP),Capacitor_SMD:C_0603_1608Metric,1,0.00,0.00,Yageo,https://www.yageo.com,Do not populate by default
+,,,,,,,Total,9.32,,,Single-board cost in qty 100; passives priced at break

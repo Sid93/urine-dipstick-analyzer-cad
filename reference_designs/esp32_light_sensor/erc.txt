@@ -1,0 +1,30 @@
+ERC report (2026-05-16T17:40:42, Encoding UTF8)
+Report includes: Errors, Warnings
+
+***** Sheet /
+[same_local_global_label]: Local and global labels have same name
+    ; warning
+    @(48.26 mm, 177.80 mm): Global Label 'VBUS_PROT'
+    @(165.10 mm, 55.88 mm): Label 'VBUS_PROT'
+[same_local_global_label]: Local and global labels have same name
+    ; warning
+    @(93.98 mm, 182.88 mm): Global Label '3V3_LDO'
+    @(81.28 mm, 177.80 mm): Label '3V3_LDO'
+
+ ** ERC messages: 2  Errors 0  Warnings 2
+
+ ** Ignored checks:
+    - Pin not connected
+    - Input pin not driven by any Output pins
+    - Label not connected
+    - Label connected to only one pin
+    - Global label only appears once in the schematic
+    - Wires not connected to anything
+    - Four connection points are joined together
+    - Label connects more than one wire
+    - Unconnected wire endpoint
+    - Conflict problem between pins
+    - More than one name given to this bus or net
+    - SPICE model issue
+    - Library symbol issue
+    - Assigned footprint doesn't match footprint filters
