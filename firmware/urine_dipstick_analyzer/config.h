@@ -48,7 +48,7 @@
 
 // --- MOSFET Gates ---
 #define PIN_FAN_GATE    2
-#define PIN_HEATER_GATE 4   // was 47 (collided with CAM_D3)
+#define PIN_HEATER_GATE 44  // was 4 (collided with STEPPER_STEP); UART0 RX repurposed, debug via USB-CDC
 #define PIN_UV_GATE     20
 
 // --- White LED Array ---
@@ -57,7 +57,7 @@
 // --- RGB Status LED (Common Anode, active LOW) ---
 #define PIN_RGB_RED      7
 #define PIN_RGB_GREEN    8
-#define PIN_RGB_BLUE    17
+#define PIN_RGB_BLUE    -1  // dropped: GPIO 17 reassigned to BARCODE_RX; use TFT for status
 
 // --- User Input ---
 #define PIN_BUTTON       1
@@ -72,8 +72,8 @@
 #define PIN_BUZZER      43
 
 // --- Barcode Scanner (UART) ---
-#define BARCODE_TX      16  // was 44 (UART0 conflict)
-#define BARCODE_RX      18  // was 3 (collided with CAM_D0)
+#define BARCODE_TX      0   // was 16 (collided with TFT_DC); strapping pin, UART idle HIGH is compatible
+#define BARCODE_RX      17  // was 18 (collided with I2C_SCL); reclaimed from RGB_BLUE (D2 dropped)
 
 // --- Thermistor (ADC) ---
 #define PIN_THERMISTOR  A0
