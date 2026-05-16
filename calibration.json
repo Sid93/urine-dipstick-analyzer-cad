@@ -1,0 +1,160 @@
+{
+  "version": "1.0",
+  "device_id": "UDA-PROTO-001",
+  "calibrated_at": "2026-05-16T00:00:00Z",
+  "notes": "Default factory calibration — re-run /calibrate after final assembly with X-Rite ColorChecker Nano (CAL1) under integrated white-LED illumination, lid closed.",
+
+  "led_correction": {
+    "white_R": 1.000,
+    "white_G": 1.000,
+    "white_B": 1.000,
+    "uv_intensity": 0.85,
+    "white_lux_target": 8000
+  },
+
+  "camera_settings": {
+    "resolution": "QVGA_320x240",
+    "exposure_us": 8000,
+    "gain": 4,
+    "awb_locked": true,
+    "awb_gains": {"R": 1.20, "G": 1.00, "B": 1.45},
+    "gamma": 2.2
+  },
+
+  "color_checker_reference": [
+    {"patch": 1,  "name": "Dark skin",      "Lab": [37.99, 13.56,  14.06], "RGB_sRGB": [115,  82,  68]},
+    {"patch": 2,  "name": "Light skin",     "Lab": [65.71, 18.13,  17.81], "RGB_sRGB": [194, 150, 130]},
+    {"patch": 3,  "name": "Blue sky",       "Lab": [49.93, -4.88, -21.93], "RGB_sRGB": [ 98, 122, 157]},
+    {"patch": 4,  "name": "Foliage",        "Lab": [43.14,-13.10,  21.91], "RGB_sRGB": [ 87, 108,  67]},
+    {"patch": 5,  "name": "Blue flower",    "Lab": [55.11,  8.84, -25.40], "RGB_sRGB": [133, 128, 177]},
+    {"patch": 6,  "name": "Bluish green",   "Lab": [70.72,-33.40, -0.20],  "RGB_sRGB": [103, 189, 170]},
+    {"patch": 7,  "name": "Orange",         "Lab": [62.66, 36.07,  57.10], "RGB_sRGB": [214, 126,  44]},
+    {"patch": 8,  "name": "Purplish blue",  "Lab": [40.02, 10.41, -45.96], "RGB_sRGB": [ 80,  91, 166]},
+    {"patch": 9,  "name": "Moderate red",   "Lab": [51.12, 48.24,  16.25], "RGB_sRGB": [193,  90,  99]},
+    {"patch": 10, "name": "Purple",         "Lab": [30.33, 22.98, -21.59], "RGB_sRGB": [ 94,  60, 108]},
+    {"patch": 11, "name": "Yellow green",   "Lab": [72.53,-23.71,  57.26], "RGB_sRGB": [157, 188,  64]},
+    {"patch": 12, "name": "Orange yellow",  "Lab": [71.94, 19.36,  67.86], "RGB_sRGB": [224, 163,  46]},
+    {"patch": 13, "name": "Blue",           "Lab": [28.78, 14.18, -50.30], "RGB_sRGB": [ 56,  61, 150]},
+    {"patch": 14, "name": "Green",          "Lab": [55.26,-38.34,  31.37], "RGB_sRGB": [ 70, 148,  73]},
+    {"patch": 15, "name": "Red",            "Lab": [42.10, 53.38,  28.19], "RGB_sRGB": [175,  54,  60]},
+    {"patch": 16, "name": "Yellow",         "Lab": [81.73,  4.04,  79.82], "RGB_sRGB": [231, 199,  31]},
+    {"patch": 17, "name": "Magenta",        "Lab": [51.94, 49.99, -14.57], "RGB_sRGB": [187,  86, 149]},
+    {"patch": 18, "name": "Cyan",           "Lab": [51.04,-28.63, -28.64], "RGB_sRGB": [  8, 133, 161]},
+    {"patch": 19, "name": "White 9.5",      "Lab": [96.54, -0.43,   1.19], "RGB_sRGB": [243, 243, 242]},
+    {"patch": 20, "name": "Neutral 8",      "Lab": [81.26, -0.64,  -0.34], "RGB_sRGB": [200, 200, 200]},
+    {"patch": 21, "name": "Neutral 6.5",    "Lab": [66.77, -0.73,  -0.50], "RGB_sRGB": [160, 160, 160]},
+    {"patch": 22, "name": "Neutral 5",      "Lab": [50.87, -0.13,  -0.27], "RGB_sRGB": [122, 122, 121]},
+    {"patch": 23, "name": "Neutral 3.5",    "Lab": [35.66, -0.46,  -0.48], "RGB_sRGB": [ 85,  85,  85]},
+    {"patch": 24, "name": "Black 2",        "Lab": [20.46, -0.08,  -0.97], "RGB_sRGB": [ 52,  52,  52]}
+  ],
+
+  "pad_calibration": {
+    "glucose": {
+      "channel": "G",
+      "ranges": [0, 100, 250, 500, 1000, 2000],
+      "reference_RGB": [[ 92, 168, 102], [128, 162,  88], [165, 152,  74], [188, 130,  60], [205,  98,  44], [218,  72,  32]],
+      "rgb_to_value": {"a": 0.0, "b": -0.300, "c": 250.0},
+      "units": "mg/dL"
+    },
+    "protein": {
+      "channel": "G",
+      "ranges": [0, 15, 30, 100, 300, 2000],
+      "reference_RGB": [[235, 232,  78], [200, 220, 110], [160, 200, 130], [110, 175, 150], [ 70, 150, 165], [ 35, 110, 175]],
+      "rgb_to_value": {"a": 0.0, "b": -0.200, "c": 50.0},
+      "units": "mg/dL"
+    },
+    "ketone": {
+      "channel": "R",
+      "ranges": [0, 5, 15, 40, 80, 160],
+      "reference_RGB": [[230, 195, 170], [220, 165, 155], [205, 130, 145], [185,  90, 135], [160,  55, 130], [130,  30, 120]],
+      "rgb_to_value": {"a": 0.0, "b": 0.250, "c": -10.0},
+      "units": "mg/dL"
+    },
+    "bilirubin": {
+      "channel": "R",
+      "ranges": [0, 1, 2, 4],
+      "reference_RGB": [[245, 232, 195], [235, 200, 175], [220, 170, 160], [200, 130, 145]],
+      "rgb_to_value": {"a": 0.0, "b": 0.080, "c": -8.0},
+      "units": "mg/dL"
+    },
+    "blood": {
+      "channel": "G",
+      "ranges": [0, 10, 25, 80, 200],
+      "reference_RGB": [[245, 235, 145], [195, 215, 135], [140, 180, 130], [ 90, 140, 120], [ 55, 100, 100]],
+      "rgb_to_value": {"a": 0.0, "b": -0.150, "c": 30.0},
+      "units": "Ery/uL"
+    },
+    "ph": {
+      "channel": "RGB_ratio",
+      "ranges": [5.0, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0],
+      "reference_RGB": [[235, 145,  55], [230, 175,  80], [215, 195, 105], [180, 200, 130], [130, 195, 155], [ 80, 175, 175], [ 50, 130, 175], [ 45,  85, 165]],
+      "rgb_to_value": {"R_weight": 0.40, "G_weight": 0.20, "B_weight": -0.40, "offset": 7.0},
+      "units": "pH"
+    },
+    "urobilinogen": {
+      "channel": "R",
+      "ranges": [0.2, 1, 2, 4, 8],
+      "reference_RGB": [[245, 215, 175], [235, 180, 160], [220, 145, 145], [200, 105, 135], [175,  70, 125]],
+      "rgb_to_value": {"a": 0.0, "b": 0.040, "c": -3.0},
+      "units": "mg/dL"
+    },
+    "nitrite": {
+      "channel": "R",
+      "binary": true,
+      "threshold": 180,
+      "reference_RGB": [[248, 240, 230], [220, 130, 145]],
+      "labels": ["NEG", "POS"],
+      "units": "presence"
+    },
+    "leukocytes": {
+      "channel": "B",
+      "ranges": [0, 15, 70, 125, 500],
+      "reference_RGB": [[245, 230, 215], [230, 195, 200], [205, 155, 195], [175, 110, 185], [140,  70, 170]],
+      "rgb_to_value": {"a": 0.0, "b": -0.350, "c": 90.0},
+      "units": "Leu/uL"
+    },
+    "specific_gravity": {
+      "channel": "B",
+      "ranges": [1.000, 1.005, 1.010, 1.015, 1.020, 1.025, 1.030],
+      "reference_RGB": [[ 60, 130, 180], [ 95, 150, 165], [125, 170, 145], [155, 185, 120], [185, 195, 100], [210, 200,  80], [230, 195,  60]],
+      "rgb_to_value": {"a": 0.0, "b": -0.0001, "c": 1.030},
+      "units": "g/mL"
+    }
+  },
+
+  "pad_roi_offsets_mm": [
+    {"pad": "GLU", "x_mm":  4.0},
+    {"pad": "PRO", "x_mm": 10.0},
+    {"pad": "pH",  "x_mm": 16.0},
+    {"pad": "SG",  "x_mm": 22.0},
+    {"pad": "KET", "x_mm": 28.0},
+    {"pad": "BIL", "x_mm": 34.0},
+    {"pad": "URO", "x_mm": 40.0},
+    {"pad": "BLD", "x_mm": 46.0},
+    {"pad": "NIT", "x_mm": 52.0},
+    {"pad": "LEU", "x_mm": 58.0}
+  ],
+
+  "temperature_compensation": {
+    "reference_C": 25.0,
+    "coefficients": {
+      "glucose":         0.0020,
+      "protein":         0.0010,
+      "ketone":          0.0015,
+      "bilirubin":       0.0008,
+      "blood":           0.0005,
+      "ph":              0.0030,
+      "urobilinogen":    0.0010,
+      "leukocytes":      0.0012,
+      "specific_gravity": 0.00005
+    }
+  },
+
+  "timing": {
+    "reaction_window_s": {
+      "GLU": 30, "PRO": 60, "pH": 60, "SG": 45, "KET": 40,
+      "BIL": 30, "URO": 60, "BLD": 60, "NIT": 60, "LEU": 120
+    },
+    "capture_at_s": 60
+  }
+}
